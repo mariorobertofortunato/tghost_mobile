@@ -1,0 +1,4 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report (private)
+    about: Do not post vulnerabilities publicly. Contact maintainers privately.

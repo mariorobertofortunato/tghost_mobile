@@ -65,6 +65,18 @@ This project adopts the **Horizon Pattern** for presentation and state orchestra
 ./gradlew test
 ```
 
+## Contributing Quick Start
+
+If you want to contribute code, use the fork workflow:
+
+1. Fork this repository on GitHub.
+2. Clone your fork locally.
+3. Create a feature branch from your local `main`.
+4. Push the branch to your fork.
+5. Open a pull request from your fork branch to this repository `main`.
+
+Detailed contributor rules are in `CONTRIBUTING.md`.
+
 ## Configuration Notes
 
 - Some providers require personal API keys (for example RPC providers).

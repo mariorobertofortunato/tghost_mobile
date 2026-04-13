@@ -19,12 +19,22 @@ This document defines workflow, quality gates, and security expectations.
 ## Development Setup
 
 1. Install Android Studio and JDK 21.
-2. Clone and open the project.
-3. Sync Gradle.
-4. Build locally:
+2. Fork the repository on GitHub.
+3. Clone your fork and open the project.
+4. Add the upstream remote (recommended) to keep your fork updated.
+5. Sync Gradle.
+6. Build locally:
 
 ```bash
 ./gradlew :app:assembleDebug
+```
+
+Recommended git setup:
+
+```bash
+git remote add upstream https://github.com/mariorobertofortunato/tghost_foss.git
+git fetch upstream
+git checkout -b feat/my-change upstream/main
 ```
 
 ## Architecture Alignment

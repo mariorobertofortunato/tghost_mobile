@@ -1,0 +1,5 @@
+<resources>
+    <!-- Base application theme. -->
+    <style name="Theme.tghost" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar" >
+    </style>
+</resources>

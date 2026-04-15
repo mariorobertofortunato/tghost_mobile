@@ -8,16 +8,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.PreviewLightDark
 import com.mrf.tghost.R
 import com.mrf.tghost.app.compositions.MainScreenEventTunnel
 import com.mrf.tghost.app.contracts.MainScreenEvent
 import com.mrf.tghost.app.ui.composables.RadioButtonGroup
 import com.mrf.tghost.app.ui.composables.text.BaseTextField
-import com.mrf.tghost.app.ui.theme.PaddingDimensions.paddingNormal
 import com.mrf.tghost.app.ui.theme.PaddingDimensions.paddingSmall
-import com.mrf.tghost.app.ui.theme.TGhostTheme
-import com.mrf.tghost.domain.model.SupportedChain
+import com.mrf.tghost.app.utils.isValidKey
 import com.mrf.tghost.domain.model.SupportedChainId
 
 @Composable
@@ -53,16 +50,15 @@ fun AddWalletContent() {
             errorLabelValue = "Invalid ${selectedChain.value} key",
             trailingIcon = R.drawable.ic_account_single,
             onTrailingIConClick = {
-                if (publicKeyInput.value.isNotBlank()
-                // && isValidKey(publicKeyInput.value, selectedChain.value)
-                ) {
+                val currentChainId = SupportedChainId.entries.find {
+                    it.name.slice(0..2).lowercase() == selectedChain.value
+                } ?: SupportedChainId.SOL
+
+                if (publicKeyInput.value.isNotBlank() && isValidKey(publicKeyInput.value, currentChainId)) {
                     eventTunnel(
                         MainScreenEvent.ConnectWallet(
                             publicKey = publicKeyInput.value,
-                            chain = SupportedChainId.entries.find {
-                                it.name.slice(0..2).lowercase() == selectedChain.value
-                            }
-                                ?: SupportedChainId.SOL
+                            chain = currentChainId
                         )
                     )
                     eventTunnel(MainScreenEvent.CloseDrawer)

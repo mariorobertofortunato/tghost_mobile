@@ -1,6 +1,6 @@
 package com.mrf.tghost.app.utils
 
-import com.mrf.tghost.domain.model.SupportedChain
+import com.mrf.tghost.domain.model.SupportedChainId
 
 fun shrinkAddress(
     address: String,
@@ -29,30 +29,28 @@ fun formatWalletDisplay(
 
 
 
-fun isValidKey(key: String, selectedChain: String): Boolean {
-    return when (selectedChain) {
-        SupportedChain.SOLANA.name -> {
+fun isValidKey(key: String, chainId: SupportedChainId): Boolean {
+    return when (chainId) {
+        SupportedChainId.SOL -> {
             checkSolanaKeyValidity(key)
         }
 
-        SupportedChain.EVM.name -> {
+        SupportedChainId.EVM -> {
             checkEvmKeyValidity(key)
         }
 
-        SupportedChain.SUI.name -> {
+        SupportedChainId.SUI -> {
             checkSuiKeyValidity(key)
         }
 
-        SupportedChain.TEZ.name -> {
+        SupportedChainId.TEZ -> {
             checkTezosKeyValidity(key)
         }
-
-        else -> false
     }
 }
 
 fun checkSolanaKeyValidity(key: String): Boolean {
-    //if (checkTezosKeyValidity(key)) return false
+    if (checkTezosKeyValidity(key)) return false
     val regex = Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$")
     return regex.matches(key)
 }

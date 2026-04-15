@@ -66,12 +66,6 @@ enum class SupportedChain(val chain: Chain) {
                     requiresApiKey = true,
                     supportedNetworks = listOf(NetworkType.MAINNET, NetworkType.TESTNET, NetworkType.DEVNET),
                 ),
-/*                RpcProviderOption(
-                    id = RpcProviderId.ALCHEMY,
-                    displayName = "Alchemy",
-                    requiresApiKey = true,
-                    supportedNetworks = listOf(NetworkType.MAINNET, NetworkType.DEVNET),
-                ),*/
                 RpcProviderOption(
                     id = RpcProviderId.DRPC,
                     displayName = "dRPC",

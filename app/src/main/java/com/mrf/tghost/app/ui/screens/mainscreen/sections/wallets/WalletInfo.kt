@@ -48,6 +48,7 @@ import com.mrf.tghost.app.ui.theme.primaryRed
 import com.mrf.tghost.app.utils.TWEEN_DURATION
 import com.mrf.tghost.app.utils.extensions.smartFormatAmount
 import com.mrf.tghost.app.utils.formatWalletDisplay
+import com.mrf.tghost.domain.model.SupportedChain
 import kotlinx.coroutines.launch
 
 @Composable
@@ -74,6 +75,7 @@ fun WalletInfo(
     val nativeBalanceDiff =
         walletState.balanceNative - (walletState.wallet?.snapshot?.balanceNative ?: 0.0)
     val usdBalanceDiff = walletState.balanceUSd - (walletState.wallet?.snapshot?.balanceUSd ?: 0.0)
+    val nativeBalanceSymbol = SupportedChain.entries.find { it.chain.id == walletState.wallet?.chainId }?.chain?.symbol ?: "N/A"
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -172,7 +174,7 @@ fun WalletInfo(
                                 2,
                                 6
                             )
-                        } ${walletState.wallet?.chainId}",
+                        } $nativeBalanceSymbol",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                         fontWeight = FontWeight.SemiBold

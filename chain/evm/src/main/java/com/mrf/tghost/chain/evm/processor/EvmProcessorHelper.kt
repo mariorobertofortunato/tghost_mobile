@@ -19,11 +19,12 @@ object EvmProcessorHelper {
 
     // Native (liquid) ETH item
     fun createEthNativeTokenAccountItem(
+        address: String,
         quote: TokenMarketDataInfo?,
         balance: Long
     ): TokenAccount {
         return TokenAccount(
-            pubkey = "",
+            pubkey = address,
             name = "Ethereum",
             symbol = quote?.baseToken?.symbol ?: "ETH",
             uri = quote?.url ?: "",
@@ -58,6 +59,7 @@ object EvmProcessorHelper {
         val stakedAmount = stakedEthAmount.divide(BigDecimal("1000000000000000000")).toDouble()
 
         return TokenAccount(
+            pubkey = "",
             name = "Staked ETH",
             symbol = "stETH",
             decimals = 18,
@@ -65,7 +67,6 @@ object EvmProcessorHelper {
             priceUsd = stakeAccount.position?.tokens?.firstOrNull()?.usdPrice.toString(),
             priceNative = "1",
             chainId = "ethereum", // This is usually Ethereum mainnet for staked ETH, unless bridged
-            pubkey = "",
             pairAddress = "",
             uri = "",
             image = null,

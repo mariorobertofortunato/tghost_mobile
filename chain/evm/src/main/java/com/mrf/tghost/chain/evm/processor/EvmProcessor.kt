@@ -30,6 +30,7 @@ import javax.inject.Inject
 import com.mrf.tghost.domain.model.Result
 import com.mrf.tghost.domain.usecase.GetMarketDataUseCase
 import com.mrf.tghost.chain.evm.processor.EvmProcessorHelper.nativeMintFor
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.collections.forEach
 
 class EvmProcessor @Inject constructor (
@@ -42,38 +43,31 @@ class EvmProcessor @Inject constructor (
 ){
 
     fun processEvmWallet(publicKey: String) = flow {
-        emit(WalletUpdate.LoadingStage("// Loading Evm wallet…"))
-
-        val allTokens = mutableListOf<TokenAccount>()
-        var totalUsd = 0.0
-        var totalNative = 0.0
 
         for (chain in EvmChain.entries) {
             processEvmChain(chain, publicKey).collect { update ->
                 when (update) {
-                    is EvmChainUpdate.LoadingStage -> emit(WalletUpdate.LoadingStage(update.stage))
+                    is EvmChainUpdate.LoadingStage -> {
+                        emit(WalletUpdate.LoadingStage(update.stage))
+                    }
                     is EvmChainUpdate.Success -> {
-                        totalUsd += update.totalUsd
-                        totalNative += update.totalNative
-                        allTokens.addAll(update.tokens)
+                        emit(WalletUpdate.Success(tokens = update.tokens))
                     }
                     is EvmChainUpdate.Error -> {
                         emit(WalletUpdate.Error(update.message))
-                        return@collect
                     }
                 }
             }
         }
-        emit(WalletUpdate.Success(totalUsd, totalNative, allTokens))
+        emit(WalletUpdate.LoadingStage(null))
     }.catch {
         emit(WalletUpdate.Error(it.message ?: it.cause?.message ?: "Unknown error"))
     }
 
     /**
-     * Processes a single EVM chain and emits loading stages plus a final Success or Error.
+     * Processes a single EVM chain
      */
     private fun processEvmChain(evmChainId: EvmChain, publicKey: String): Flow<EvmChainUpdate> = flow {
-        emit(EvmChainUpdate.LoadingStage("// ${evmChainId.name} processing started"))
 
         suspend fun getMarketData(address: String): Deferred<Result<TokenMarketDataInfo?>> {
             return coroutineScope {
@@ -88,10 +82,10 @@ class EvmProcessor @Inject constructor (
             }
         }
 
-        val balanceFlow = walletBalanceUseCase.balanceEvm(publicKey, evmChainId)
-        val tokenAccountsFlow = tokenAccountsUseCase.evmTokenAccounts(publicKey, evmChainId)
-        val stakingAccountsFlow = stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId.chain)
-        val nftFlow = nftUseCase.evmNFTSAccounts(publicKey, evmChainId.chain)
+        val balanceFlow = walletBalanceUseCase.balanceEvm(publicKey, evmChainId).distinctUntilChanged()
+        val tokenAccountsFlow = tokenAccountsUseCase.evmTokenAccounts(publicKey, evmChainId).distinctUntilChanged()
+        val stakingAccountsFlow = stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId.chain).distinctUntilChanged()
+        val nftFlow = nftUseCase.evmNFTSAccounts(publicKey, evmChainId.chain).distinctUntilChanged()
 
         combineTransform(
             balanceFlow,
@@ -109,13 +103,14 @@ class EvmProcessor @Inject constructor (
             var ethPriceUsd = 0.0
 
             // 1. Native EVM token (e.g. ETH / Base ETH)
-            emit(EvmChainUpdate.LoadingStage("// Processing native ${evmChainId.name} coins"))
             if (balanceFlow.isSuccess()) {
+                emit(EvmChainUpdate.LoadingStage("// Processing native ${evmChainId.name} coins"))
                 val nativeAmount = balanceFlow.data
                 val nativeQuote = getMarketData(nativeMintFor(evmChainId.chain)).await()
                 if (nativeQuote.isSuccess()) {
                     val ethereumTokenAccount =
                         EvmProcessorHelper.createEthNativeTokenAccountItem(
+                            address = nativeMintFor(evmChainId.chain),
                             quote = nativeQuote.data ?: TokenMarketDataInfo(),
                             balance = nativeAmount
                         )
@@ -130,8 +125,8 @@ class EvmProcessor @Inject constructor (
             }
 
             // 2. EVM Token Accounts
-            emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Token Accounts"))
             if (tokenAccountsFlow.isSuccess()) {
+                emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Token Accounts"))
                 val tokenList = tokenAccountsFlow.data
                 val tokenDetails = tokenList
                     .filter { it.balance > BigDecimal.ZERO }
@@ -161,7 +156,7 @@ class EvmProcessor @Inject constructor (
                     }
                     .awaitAll()
                 tokenDetails
-                    .filter { (_, _, marketDataInfo) -> (marketDataInfo?.priceUsdDouble ?: 0.0) > 0.001 }
+                    .filter { (_, _, marketDataInfo) -> (marketDataInfo?.priceUsdDouble ?: 0.0) > 0.00001 }
                     .forEach { (tokenAccount, onChainMetadata, marketDataInfo) ->
                         val tokenItem =
                             EvmProcessorHelper.createEvmTokenAccountItem(
@@ -172,14 +167,15 @@ class EvmProcessor @Inject constructor (
                             )
                         processedTokens.add(tokenItem)
                     }
+                emit(EvmChainUpdate.Success(tokens = processedTokens))
             }
             else if (tokenAccountsFlow.isFailure()) {
                 emit(EvmChainUpdate.Error("${evmChainId.name} tokens: ${tokenAccountsFlow.errorMessage}"))
             }
 
             // 3. Staking Accounts
-            emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Native Staking Accounts"))
             if (stakingAccountsFlow.isSuccess()) {
+                emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Native Staking Accounts"))
                 val stakes = stakingAccountsFlow.data
                 stakes.forEach { stakeAccount ->
                     val posBalance = stakeAccount.position?.balanceUsd ?: 0.0
@@ -190,6 +186,7 @@ class EvmProcessor @Inject constructor (
                                 stakedEthAmount = posBalance.toBigDecimal()
                             )
                         )
+                        emit(EvmChainUpdate.Success(tokens = processedTokens))
                     }
                 }
             }
@@ -198,8 +195,8 @@ class EvmProcessor @Inject constructor (
             }
 
             // 4. EVM NFTs
-            emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} NFTs Accounts"))
             if (nftsFlow.isSuccess()) {
+                emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} NFTs Accounts"))
                 val results = nftsFlow.data
                 results.result
                     ?.filter { it.possibleSpam != true }
@@ -211,6 +208,7 @@ class EvmProcessor @Inject constructor (
                                     evmChainId = evmChainId.chain
                                 )
                             )
+                            emit(EvmChainUpdate.Success(tokens = processedTokens))
                         }
                     }
             }
@@ -218,15 +216,7 @@ class EvmProcessor @Inject constructor (
                 emit(EvmChainUpdate.Error("${evmChainId.name} NFTs ${nftsFlow.errorMessage}"))
             }
 
-            // 5. Calculate wallet balances
-            emit(EvmChainUpdate.LoadingStage("// Calculating ${evmChainId.name} wallet balances"))
-            val totalBalanceUsd = processedTokens.sumOf { token ->
-                token.valueUsd ?: 0.0
-            }
-            val totalBalanceNative =
-                if (ethPriceUsd > 0) totalBalanceUsd / ethPriceUsd else 0.0
-
-            emit(EvmChainUpdate.Success(totalBalanceUsd, totalBalanceNative, processedTokens))
+            emit(EvmChainUpdate.LoadingStage(null))
         }
             .catch {
                 emit(EvmChainUpdate.Error(it.message ?: it.cause?.message ?: "Unknown error"))
@@ -237,11 +227,9 @@ class EvmProcessor @Inject constructor (
 
 /** this refers to the individual EvmChains */
 sealed class EvmChainUpdate {
-    data class LoadingStage(val stage: String) : EvmChainUpdate()
+    data class LoadingStage(val stage: String?) : EvmChainUpdate()
     data class Error(val message: String) : EvmChainUpdate()
     data class Success(
-        val totalUsd: Double,
-        val totalNative: Double,
         val tokens: List<TokenAccount>
     ) : EvmChainUpdate()
 }

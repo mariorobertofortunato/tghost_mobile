@@ -30,18 +30,16 @@ class EvmHttpResolver @Inject constructor(
 
         return when (preference.providerId) {
             RpcProviderId.ALCHEMY -> evmAlchemyUrl(preference.networkType, apiKey, evmChainId)
-            RpcProviderId.ANKR -> evmAnkrUrl(preference.networkType, evmChainId)
-            RpcProviderId.DRPC -> evmDrpcUrl(preference.networkType, evmChainId)
             RpcProviderId.PUBLIC_NODE -> evmPublicNodeUrl(preference.networkType, evmChainId)
-            // Unsupported for EVM – fall back to Ethereum mainnet PublicNode.
-            RpcProviderId.OFFICIAL,
-            RpcProviderId.HELIUS,
-            RpcProviderId.ECAD_INFRA,
-                -> ETHEREUM_MAINNET_RPC_URL_PUBLIC_NODE
+            else -> ETHEREUM_MAINNET_RPC_URL_PUBLIC_NODE
         }
     }
 
-    private fun evmAlchemyUrl(networkType: NetworkType, apiKey: String?, evmChainId: EvmChain): String {
+    private fun evmAlchemyUrl(
+        networkType: NetworkType,
+        apiKey: String?,
+        evmChainId: EvmChain
+    ): String {
         require(!apiKey.isNullOrBlank()) {
             "Missing API key for Alchemy EVM RPC provider"
         }

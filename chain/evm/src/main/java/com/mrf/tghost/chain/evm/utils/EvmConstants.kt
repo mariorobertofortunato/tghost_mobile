@@ -1,11 +1,13 @@
 package com.mrf.tghost.chain.evm.utils
 
+const val POLL_MS = 60_000L
+
 const val L2_ETH_TOKEN_MINT = "0x4200000000000000000000000000000000000006"
 const val ETH_TOKEN_MINT = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 const val ARB_ETH_TOKEN_MINT = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
 const val LINEA_ETH_TOKEN_MINT = "0xE57eBd2d67B462E9926e04a8e3162D52Df17F8d2"
 
-// ------------------------- ETHEREUM & EVMs
+// ----------------- RPCs
 // Alchemy
 const val ETHEREUM_MAINNET_RPC_URL_ALCHEMY = "https://eth-mainnet.g.alchemy.com/v2/"
 const val BASE_MAINNET_RPC_URL_ALCHEMY = "https://base-mainnet.g.alchemy.com/v2/"

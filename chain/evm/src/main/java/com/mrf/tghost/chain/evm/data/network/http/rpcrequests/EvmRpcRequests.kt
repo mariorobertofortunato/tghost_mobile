@@ -31,28 +31,3 @@ fun getEvmTokenOnChainMetadataRequest(
         id = UUID.randomUUID().toString()
     )
 }
-
-fun getEvmTokenAccountsRequest(
-    address: String
-): JsonRpc20Request {
-    return JsonRpc20Request(
-        method = "alchemy_getTokenBalances",
-        params = buildJsonArray {
-            add(address)
-            add("erc20")
-        },
-        id = UUID.randomUUID().toString()
-    )
-}
-
-fun getNFTsByOwnerRequest(
-    owner: String
-): JsonRpc20Request {
-    return JsonRpc20Request(
-        method = "getNFTsForOwner",
-        params = buildJsonObject {
-            put("owner", owner)
-        },
-        id = UUID.randomUUID().toString()
-    )
-}

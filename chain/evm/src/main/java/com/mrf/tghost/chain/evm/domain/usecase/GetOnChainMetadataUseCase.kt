@@ -10,6 +10,6 @@ import javax.inject.Inject
 class GetOnChainMetadataUseCase @Inject constructor(
     private val onChainMetadataRepository: EvmOnChainMetadataRepository
 ){
-    fun getEvmTokenOnChainMetadata(address: String, evmChain: EvmChain): Flow<Result<EvmMetadataResponse?>> =
+    fun getEvmTokenOnChainMetadata(address: String, evmChain: EvmChain?): Flow<Result<EvmMetadataResponse?>> =
         onChainMetadataRepository.getEvmTokenOnChainMetadata(address, evmChain)
 }

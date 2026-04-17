@@ -5,6 +5,8 @@ data class EvmNftResponse(
     val page: Int? = null,
     val pageSize: Int? = null,
     val cursor: String? = null,
+    /** Alchemy Portfolio API total count when present. */
+    val totalCount: Int? = null,
     val result: List<EvmNftResult>? = null
 )
 
@@ -14,6 +16,8 @@ data class EvmNftResult(
     val tokenAddress: String? = null,
     val contractType: String? = null,
     val ownerOf: String? = null,
+    /** Alchemy: `network` (e.g. eth-mainnet). */
+    val network: String? = null,
     val lastMetadataSync: String? = null,
     val lastTokenUriSync: String? = null,
     val metadata: String? = null,
@@ -42,7 +46,9 @@ data class EvmNftResult(
     val listPrice: EvmNftListPrice? = null,
     val floorPrice: String? = null,
     val floorPriceUsd: String? = null,
-    val floorPriceCurrency: String? = null
+    val floorPriceCurrency: String? = null,
+    val lastSale: EvmNftLastSale? = null,
+    val media: EvmNftMedia? = null,
 )
 
 data class EvmNftNormalizedMetadata(
@@ -52,7 +58,56 @@ data class EvmNftNormalizedMetadata(
     val externalLink: String? = null,
     val externalUrl: String? = null,
     val image: String? = null,
-    // val attributes: List<Attribute>? = null
+    val attributes: List<EvmNftAttribute> = emptyList(),
+)
+
+data class EvmNftAttribute(
+    val traitType: String? = null,
+    val value: String? = null,
+    val displayType: String? = null,
+    val maxValue: Int? = null,
+    val traitCount: Int? = null,
+    val order: Int? = null,
+)
+
+data class EvmNftLastSale(
+    val transactionHash: String? = null,
+    val blockTimestamp: String? = null,
+    val buyerAddress: String? = null,
+    val sellerAddress: String? = null,
+    val price: String? = null,
+    val priceFormatted: String? = null,
+    val usdPriceAtSale: String? = null,
+    val currentUsdValue: String? = null,
+    val tokenAddress: String? = null,
+    val tokenId: String? = null,
+    val paymentToken: EvmNftPaymentToken? = null,
+)
+
+data class EvmNftPaymentToken(
+    val tokenName: String? = null,
+    val tokenSymbol: String? = null,
+    val tokenLogo: String? = null,
+    val tokenDecimals: String? = null,
+    val tokenAddress: String? = null,
+)
+
+data class EvmNftMedia(
+    val mimetype: String? = null,
+    val category: String? = null,
+    val status: String? = null,
+    val originalMediaUrl: String? = null,
+    val updatedAt: String? = null,
+    val parentHash: String? = null,
+    val low: EvmNftMediaVariant? = null,
+    val medium: EvmNftMediaVariant? = null,
+    val high: EvmNftMediaVariant? = null,
+)
+
+data class EvmNftMediaVariant(
+    val width: Int? = null,
+    val height: Int? = null,
+    val url: String? = null,
 )
 
 data class EvmNftListPrice(

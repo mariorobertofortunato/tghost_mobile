@@ -6,5 +6,5 @@ import com.mrf.tghost.chain.evm.domain.model.EvmMetadataResponse
 import kotlinx.coroutines.flow.Flow
 
 interface EvmOnChainMetadataRepository {
-    fun getEvmTokenOnChainMetadata(address: String, evmChain: EvmChain): Flow<Result<EvmMetadataResponse?>>
+    fun getEvmTokenOnChainMetadata(address: String, evmChain: EvmChain?): Flow<Result<EvmMetadataResponse?>>
 }

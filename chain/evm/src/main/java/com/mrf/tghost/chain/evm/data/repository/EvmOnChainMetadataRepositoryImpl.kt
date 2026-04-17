@@ -20,13 +20,13 @@ class EvmOnChainMetadataRepositoryImpl @Inject constructor(
 
     override fun getEvmTokenOnChainMetadata(
         address: String,
-        evmChain: EvmChain
+        evmChain: EvmChain?
     ): Flow<Result<EvmMetadataResponse>> = flow {
         emit(Result.Loading)
         val url = evmHttpResolver.resolveEvmUrl(evmChain)
         val response: Rpc20Response<EvmMetadataResponseDto> =
             RpcRequestFactory.makeRpcRequest(
-                url = url,
+                url = url.first,
                 request = getEvmTokenOnChainMetadataRequest(address),
                 resultSerializer = EvmMetadataResponseDto.serializer()
             )

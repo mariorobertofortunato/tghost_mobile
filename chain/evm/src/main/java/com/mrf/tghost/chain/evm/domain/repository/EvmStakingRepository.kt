@@ -5,5 +5,5 @@ import com.mrf.tghost.chain.evm.domain.model.EvmStakingProtocol
 import kotlinx.coroutines.flow.Flow
 
 interface EvmStakingRepository {
-    fun evmStakingAccounts(publicKey: String, evmChainId: String): Flow<Result<List<EvmStakingProtocol>>?>
+    fun evmStakingAccounts(publicKey: String, evmChainId: String?): Flow<Result<List<EvmStakingProtocol>>?>
 }

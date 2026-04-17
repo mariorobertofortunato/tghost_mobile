@@ -6,5 +6,5 @@ import com.mrf.tghost.chain.evm.domain.model.EvmTokenAccount
 import kotlinx.coroutines.flow.Flow
 
 interface EvmTokenAccountsRepository {
-    fun evmTokenAccounts(publicKey: String, chainId: EvmChain): Flow<Result<List<EvmTokenAccount>>?>
+    fun evmTokenAccounts(publicKey: String, chainId: EvmChain?): Flow<Result<List<EvmTokenAccount>>?>
 }

@@ -1,7 +1,6 @@
 package com.mrf.tghost.chain.evm.processor
 
 import com.mrf.tghost.chain.evm.domain.usecase.GetNftUseCase
-import com.mrf.tghost.chain.evm.domain.usecase.GetOnChainMetadataUseCase
 import com.mrf.tghost.chain.evm.domain.usecase.GetStakingAccountsUseCase
 import com.mrf.tghost.chain.evm.domain.usecase.GetTokenAccountsUseCase
 import com.mrf.tghost.chain.evm.domain.usecase.GetWalletBalanceUseCase
@@ -25,14 +24,18 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combineTransform
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.last
-import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import javax.inject.Inject
 import com.mrf.tghost.domain.model.Result
 import com.mrf.tghost.domain.usecase.GetMarketDataUseCase
 import com.mrf.tghost.chain.evm.processor.EvmProcessorHelper.nativeMintFor
+import com.mrf.tghost.domain.model.RpcPreference
+import com.mrf.tghost.domain.model.RpcProviderId
+import com.mrf.tghost.domain.model.SupportedChainId
+import com.mrf.tghost.domain.repository.PreferencesRepository
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.collections.forEach
@@ -42,28 +45,30 @@ class EvmProcessor @Inject constructor(
     private val tokenAccountsUseCase: GetTokenAccountsUseCase,
     private val stakingAccountsUseCase: GetStakingAccountsUseCase,
     private val nftUseCase: GetNftUseCase,
-    private val onChainMetadataUseCase: GetOnChainMetadataUseCase,
-    private val getMarketDataUseCase: GetMarketDataUseCase
+    private val getMarketDataUseCase: GetMarketDataUseCase,
+    private val preferencesRepository: PreferencesRepository,
 ) {
 
     fun processEvmWallet(publicKey: String): Flow<WalletUpdate> = channelFlow {
+
+        val provider: RpcPreference =
+            preferencesRepository.getRpcPreference(SupportedChainId.EVM).first()
         val chainTokens = mutableMapOf<EvmChain, List<TokenAccount>>()
         val mutex = Mutex()
 
-        EvmChain.entries.forEach { chain ->
-            launch {
-                processEvmChain(chain, publicKey).collect { update ->
+        when (provider.providerId) {
+            RpcProviderId.ALCHEMY -> {
+                // per tutte le chain: una sola chiamata per fetchare token accounts (compresi native) + una sola chiamata per nft + una sola chiamata per trnasfers
+                // No defi positions
+
+                processEvmChain(evmChainId = null, publicKey = publicKey).collect { update ->
                     when (update) {
                         is EvmChainUpdate.LoadingStage -> {
                             send(WalletUpdate.LoadingStage(update.stage))
                         }
 
                         is EvmChainUpdate.Success -> {
-                            val mergedTokens = mutex.withLock {
-                                chainTokens[chain] = update.tokens
-                                chainTokens.values.flatten()
-                            }
-                            send(WalletUpdate.Success(tokens = mergedTokens))
+                            send(WalletUpdate.Success(tokens = update.tokens))
                         }
 
                         is EvmChainUpdate.Error -> {
@@ -71,10 +76,102 @@ class EvmProcessor @Inject constructor(
                         }
                     }
                 }
-
             }
 
+            RpcProviderId.MORALIS -> {
+                // una chiamata PER OGNI CHAIN per fetchare token accounts (compresi native) +
+                // una chiamata PER OGNI CHAIN per fetchare nft +
+                // una chiamata PER OGNI CHAIN per fetchare defi positions +
+                // una chiamata PER OGNI CHAIN per fetchare transfers
+
+                EvmChain.entries.forEach { chain ->
+                    launch {
+                        processEvmChain(
+                            evmChainId = chain,
+                            publicKey = publicKey
+                        ).collect { update ->
+                            when (update) {
+                                is EvmChainUpdate.LoadingStage -> {
+                                    send(WalletUpdate.LoadingStage(update.stage))
+                                }
+
+                                is EvmChainUpdate.Success -> {
+                                    val mergedTokens = mutex.withLock {
+                                        chainTokens[chain] = update.tokens
+                                        chainTokens.values.flatten()
+                                    }
+                                    send(WalletUpdate.Success(tokens = mergedTokens))
+                                    send(WalletUpdate.LoadingStage(null))
+                                }
+
+                                is EvmChainUpdate.Error -> {
+                                    send(WalletUpdate.Error(update.message))
+                                }
+                            }
+                        }
+
+                    }
+
+                }
+            }
+
+            else -> {
+                // una chiamata PER OGNI CHAIN rpc eth_getBalance
+                // No erc-20, no nft, no defi, no transfers
+                EvmChain.entries.forEach { chainId ->
+                    launch {
+                        suspend fun getMarketData(address: String): Deferred<Result<TokenMarketDataInfo?>> {
+                            return coroutineScope {
+                                async {
+                                    getMarketDataUseCase.fetchMarketDataInfo(
+                                        MARKET_DATA_URL_DEXSCREENER,
+                                        address,
+                                        SupportedChain.EVM,
+                                        if (chainId.chain == "eth") "ethereum" else chainId.chain
+                                    ).last()
+                                }
+                            }
+                        }
+
+                        val balanceFlow = walletBalanceUseCase.balanceEvm(publicKey, chainId)
+                            .distinctUntilChanged()
+
+                        balanceFlow.collect { update ->
+                            if (update == null) {
+                                send(WalletUpdate.LoadingStage("// Synchronizing ${chainId.name} data…"))
+                                return@collect
+                            }
+
+                            if (update.isSuccess()) {
+                                send(WalletUpdate.LoadingStage("// Processing native ${chainId.name} coins"))
+                                val nativeAmount = update.data
+                                val nativeQuote =
+                                    getMarketData(nativeMintFor(chainId.chain)).await()
+                                if (nativeQuote.isSuccess()) {
+                                    val ethereumTokenAccount =
+                                        EvmProcessorHelper.createEthNativeTokenAccountItem(
+                                            address = nativeMintFor(chainId.chain),
+                                            quote = nativeQuote.data ?: TokenMarketDataInfo(),
+                                            balance = nativeAmount
+                                        )
+
+                                    val mergedTokens = mutex.withLock {
+                                        chainTokens[chainId] = listOf(ethereumTokenAccount)
+                                        chainTokens.values.flatten()
+                                    }
+                                    send(WalletUpdate.Success(tokens = mergedTokens))
+                                    send(WalletUpdate.LoadingStage(null))
+                                }
+                            } else if (update.isFailure()) {
+                                send(WalletUpdate.Error("${chainId.name} balance: ${update.errorMessage}"))
+                            }
+                        }
+
+                    }
+                }
+            }
         }
+
     }.catch {
         emit(WalletUpdate.Error(it.message ?: it.cause?.message ?: "Unknown error"))
     }
@@ -82,40 +179,36 @@ class EvmProcessor @Inject constructor(
     /**
      * Processes a single EVM chain
      */
-    private fun processEvmChain(evmChainId: EvmChain, publicKey: String): Flow<EvmChainUpdate> =
+    private fun processEvmChain(evmChainId: EvmChain?, publicKey: String): Flow<EvmChainUpdate> =
         flow {
 
-            suspend fun getMarketData(address: String): Deferred<Result<TokenMarketDataInfo?>> {
+            suspend fun getMarketData(
+                address: String,
+                dexChainId: String
+            ): Deferred<Result<TokenMarketDataInfo?>> {
                 return coroutineScope {
                     async {
                         getMarketDataUseCase.fetchMarketDataInfo(
                             MARKET_DATA_URL_DEXSCREENER,
                             address,
                             SupportedChain.EVM,
-                            if (evmChainId.chain == "eth") "ethereum" else evmChainId.chain
+                            dexChainId
                         ).last()
                     }
                 }
             }
 
-            val balanceFlow =
-                walletBalanceUseCase.balanceEvm(publicKey, evmChainId).distinctUntilChanged()
-            val tokenAccountsFlow =
-                tokenAccountsUseCase.evmTokenAccounts(publicKey, evmChainId).distinctUntilChanged()
-            val stakingAccountsFlow =
-                stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId.chain)
-                    .distinctUntilChanged()
-            val nftFlow =
-                nftUseCase.evmNFTSAccounts(publicKey, evmChainId.chain).distinctUntilChanged()
+            val tokenAccountsFlow = tokenAccountsUseCase.evmTokenAccounts(publicKey, evmChainId).distinctUntilChanged()
+            val stakingAccountsFlow = stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId?.chain).distinctUntilChanged()
+            val nftFlow = nftUseCase.evmNFTSAccounts(publicKey, evmChainId).distinctUntilChanged()
 
             combineTransform(
-                balanceFlow,
                 tokenAccountsFlow,
                 stakingAccountsFlow,
                 nftFlow
-            ) { balanceFlow, tokenAccountsFlow, stakingAccountsFlow, nftsFlow ->
-                if (balanceFlow == null || tokenAccountsFlow == null || stakingAccountsFlow == null || nftsFlow == null) {
-                    emit(EvmChainUpdate.LoadingStage("// Synchronizing ${evmChainId.name} data…"))
+            ) { tokenAccountsFlow, stakingAccountsFlow, nftsFlow ->
+                if (tokenAccountsFlow == null || stakingAccountsFlow == null || nftsFlow == null) {
+                    emit(EvmChainUpdate.LoadingStage("// Synchronizing ${evmChainId?.name} data…"))
                     return@combineTransform
                 }
 
@@ -124,101 +217,91 @@ class EvmProcessor @Inject constructor(
                 var ethPriceUsd = 0.0
 
                 // 1. Native EVM token (e.g. ETH / Base ETH)
-                if (balanceFlow.isSuccess()) {
-                    emit(EvmChainUpdate.LoadingStage("// Processing native ${evmChainId.name} coins"))
-                    val nativeAmount = balanceFlow.data
-                    val nativeQuote = getMarketData(nativeMintFor(evmChainId.chain)).await()
-                    if (nativeQuote.isSuccess()) {
-                        val ethereumTokenAccount =
-                            EvmProcessorHelper.createEthNativeTokenAccountItem(
-                                address = nativeMintFor(evmChainId.chain),
-                                quote = nativeQuote.data ?: TokenMarketDataInfo(),
-                                balance = nativeAmount
-                            )
-                        processedTokens.add(ethereumTokenAccount)
+                // fetchati insieme egli erc-20
 
-                        ethPriceUsdString = nativeQuote.data?.priceUsd ?: "1"
-                        ethPriceUsd = ethPriceUsdString.toDoubleOrNull() ?: 0.0
-                    }
-                    emit(EvmChainUpdate.Success(tokens = processedTokens))
-                } else if (balanceFlow.isFailure()) {
-                    emit(EvmChainUpdate.Error("${evmChainId.name} balance: ${balanceFlow.errorMessage}"))
-                }
-
-                // 2. EVM Token Accounts
+                // 2. ERC-20 Token Accounts + Native tokens
                 if (tokenAccountsFlow.isSuccess()) {
-                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Token Accounts"))
+                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId?.name} ERC-20 Token Accounts"))
                     val tokenList = tokenAccountsFlow.data
                     val tokenDetails = tokenList
                         .filter { it.balance > BigDecimal.ZERO }
                         .map { tokenAccount ->
                             coroutineScope {
                                 async(Dispatchers.IO) {
-
-                                    val onChainMetadata = try {
-                                        val res = onChainMetadataUseCase.getEvmTokenOnChainMetadata(
-                                            address = tokenAccount.contractAddress,
-                                            evmChain = evmChainId
-                                        ).lastOrNull()
-                                        if (res is Result.Success) res.data else null
-                                    } catch (e: Exception) {
-                                        null
+                                    val dexChainId = when (tokenAccount.network) {
+                                        "eth-mainnet" -> "ethereum"
+                                        "base-mainnet" -> "base"
+                                        else -> if (evmChainId?.chain == "eth") "ethereum" else evmChainId?.chain
+                                            ?: "ethereum"
                                     }
-
                                     val marketData =
-                                        getMarketData(tokenAccount.contractAddress).await()
+                                        getMarketData(
+                                            tokenAccount.contractAddress,
+                                            dexChainId
+                                        ).await()
 
                                     val marketDataInfo = if (marketData.isSuccess()) {
                                         marketData.data
                                     } else null
 
-                                    Triple(tokenAccount, onChainMetadata, marketDataInfo)
+                                    Pair(tokenAccount, marketDataInfo)
                                 }
                             }
                         }
                         .awaitAll()
                     tokenDetails
-                        .filter { (_, _, marketDataInfo) ->
-                            (marketDataInfo?.priceUsdDouble ?: 0.0) > 0.00001
+                        .filter { (tokenAccount, marketDataInfo) ->
+                            val marketUsd = marketDataInfo?.priceUsdDouble ?: 0.0
+                            val alchemyUsd = tokenAccount.prices
+                                .firstOrNull {
+                                    it.currency?.equals(
+                                        "usd",
+                                        ignoreCase = true
+                                    ) == true
+                                }
+                                ?.value
+                                ?.toDoubleOrNull() ?: 0.0
+                            marketUsd > 0.00001 ||
+                                    alchemyUsd > 0.00001 ||
+                                    (tokenAccount.isNative && tokenAccount.balance > BigDecimal.ZERO)
                         }
-                        .forEach { (tokenAccount, onChainMetadata, marketDataInfo) ->
+                        .forEach { (tokenAccount, marketDataInfo) ->
                             val tokenItem =
                                 EvmProcessorHelper.createEvmTokenAccountItem(
                                     tokenAccountDetails = tokenAccount,
                                     marketDataInfo = marketDataInfo,
-                                    onChainMetadata = onChainMetadata,
-                                    evmChainId = evmChainId.chain
+                                    evmChainId = evmChainId?.chain
                                 )
                             processedTokens.add(tokenItem)
                         }
                     emit(EvmChainUpdate.Success(tokens = processedTokens))
                 } else if (tokenAccountsFlow.isFailure()) {
-                    emit(EvmChainUpdate.Error("${evmChainId.name} tokens: ${tokenAccountsFlow.errorMessage}"))
+                    emit(EvmChainUpdate.Error("${evmChainId?.name} tokens: ${tokenAccountsFlow.errorMessage}"))
                 }
 
-                // 3. Staking Accounts
-                if (stakingAccountsFlow.isSuccess()) {
-                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Native Staking Accounts"))
-                    val stakes = stakingAccountsFlow.data
-                    stakes.forEach { stakeAccount ->
-                        val posBalance = stakeAccount.position?.balanceUsd ?: 0.0
-                        if (posBalance > 0.0) {
-                            processedTokens.add(
-                                EvmProcessorHelper.createStakedEthAccountItem(
-                                    stakeAccount = stakeAccount,
-                                    stakedEthAmount = posBalance.toBigDecimal()
-                                )
-                            )
-                            emit(EvmChainUpdate.Success(tokens = processedTokens))
-                        }
-                    }
-                } else if (stakingAccountsFlow.isFailure()) {
-                    emit(EvmChainUpdate.Error("${evmChainId.name} Staking Accounts: ${stakingAccountsFlow.errorMessage}"))
-                }
+                /*                                // 3. Staking Accounts
+                                                if (stakingAccountsFlow.isSuccess()) {
+                                                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Native Staking Accounts"))
+                                                    val stakes = stakingAccountsFlow.data
+                                                    stakes.forEach { stakeAccount ->
+                                                        val posBalance = stakeAccount.position?.balanceUsd ?: 0.0
+                                                        if (posBalance > 0.0) {
+                                                            processedTokens.add(
+                                                                EvmProcessorHelper.createStakedEthAccountItem(
+                                                                    stakeAccount = stakeAccount,
+                                                                    stakedEthAmount = posBalance.toBigDecimal()
+                                                                )
+                                                            )
+                                                            emit(EvmChainUpdate.Success(tokens = processedTokens))
+                                                        }
+                                                    }
+                                                } else if (stakingAccountsFlow.isFailure()) {
+                                                    emit(EvmChainUpdate.Error("${evmChainId.name} Staking Accounts: ${stakingAccountsFlow.errorMessage}"))
+                                                }*/
 
                 // 4. EVM NFTs
                 if (nftsFlow.isSuccess()) {
-                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} NFTs Accounts"))
+                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId?.name} NFTs Accounts"))
                     val results = nftsFlow.data
                     results.result
                         ?.filter { it.possibleSpam != true }
@@ -227,14 +310,14 @@ class EvmProcessor @Inject constructor(
                                 processedTokens.add(
                                     EvmProcessorHelper.createEvmNftAccountItem(
                                         nftResult = nft,
-                                        evmChainId = evmChainId.chain
+                                        evmChainId = evmChainId?.chain
                                     )
                                 )
                                 emit(EvmChainUpdate.Success(tokens = processedTokens))
                             }
                         }
                 } else if (nftsFlow.isFailure()) {
-                    emit(EvmChainUpdate.Error("${evmChainId.name} NFTs ${nftsFlow.errorMessage}"))
+                    emit(EvmChainUpdate.Error("${evmChainId?.name} NFTs ${nftsFlow.errorMessage}"))
                 }
 
                 emit(EvmChainUpdate.LoadingStage(null))

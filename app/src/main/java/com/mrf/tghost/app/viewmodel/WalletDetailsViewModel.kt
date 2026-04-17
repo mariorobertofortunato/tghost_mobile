@@ -12,6 +12,7 @@ import com.mrf.tghost.chain.sui.processor.SuiProcessor
 import com.mrf.tghost.chain.tezos.processor.TezosProcessor
 import com.mrf.tghost.domain.model.SupportedChainId
 import com.mrf.tghost.domain.model.TokenAccount
+import com.mrf.tghost.domain.model.TokenAccountCategories
 import com.mrf.tghost.domain.model.Wallet
 import com.mrf.tghost.domain.model.WalletSnapshot
 import com.mrf.tghost.domain.model.WalletUpdate
@@ -182,6 +183,7 @@ class WalletDetailsViewModel @Inject constructor(
                                 token.valueUsd ?: 0.0
                             },
                         balanceNative = updatedTokens
+                            .filter { it.tokenAccountCategory != TokenAccountCategories.NFTS }
                             .sumOf { token ->
                                 token.valueNative ?: 0.0
                             }

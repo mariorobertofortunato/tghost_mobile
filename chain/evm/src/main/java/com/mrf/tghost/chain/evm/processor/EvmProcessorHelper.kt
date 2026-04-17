@@ -1,6 +1,5 @@
 package com.mrf.tghost.chain.evm.processor
 
-import com.mrf.tghost.chain.evm.domain.model.EvmMetadataResponse
 import com.mrf.tghost.chain.evm.domain.model.EvmNftResult
 import com.mrf.tghost.chain.evm.domain.model.EvmStakingProtocol
 import com.mrf.tghost.chain.evm.domain.model.EvmTokenAccount
@@ -90,31 +89,53 @@ object EvmProcessorHelper {
     // All others token items in the Evm wallet
     fun createEvmTokenAccountItem(
         tokenAccountDetails: EvmTokenAccount,
-        onChainMetadata: EvmMetadataResponse?,
         marketDataInfo: TokenMarketDataInfo?,
-        evmChainId: String
+        evmChainId: String?
     ): TokenAccount {
-        val decimals = onChainMetadata?.decimals ?: 18
+        val tokenChainId = when (tokenAccountDetails.network) {
+            "eth-mainnet" -> "eth"
+            "base-mainnet" -> "base"
+            else -> evmChainId
+        }
+        val decimals = tokenAccountDetails.decimals ?: 18
         val amountBigInt = tokenAccountDetails.balance
         val uiAmount = amountBigInt.movePointLeft(decimals).toDouble()
 
+        val alchemyUsdPrice = tokenAccountDetails.prices
+            .firstOrNull { it.currency?.equals("usd", ignoreCase = true) == true }
+            ?.value
+
+        val priceUsd = when {
+            tokenAccountDetails.isNative ->
+                alchemyUsdPrice?.takeIf { it.isNotBlank() }
+                    ?: marketDataInfo?.priceUsd
+                    ?: "0"
+            else -> marketDataInfo?.priceUsd ?: "0"
+        }
+
+        val priceNative = if (tokenAccountDetails.isNative) {
+            "1"
+        } else {
+            marketDataInfo?.priceNative ?: "0"
+        }
+
         return TokenAccount(
             pubkey = tokenAccountDetails.contractAddress,
-            name = onChainMetadata?.name ?: tokenAccountDetails.name ?: marketDataInfo?.baseToken?.name ?:  "Unknown",
-            symbol = onChainMetadata?.symbol ?: tokenAccountDetails.symbol ?: marketDataInfo?.baseToken?.symbol ?:  "?",
+            name = tokenAccountDetails.name ?: marketDataInfo?.baseToken?.name ?:  "Unknown",
+            symbol = tokenAccountDetails.symbol ?: marketDataInfo?.baseToken?.symbol ?:  "?",
             uri = marketDataInfo?.url ?: "",
             decimals = decimals,
             amountDouble = uiAmount,
-            image = marketDataInfo?.info?.imageUrl,
+            image = tokenAccountDetails.logo ?: marketDataInfo?.info?.imageUrl,
             description = null,
             createdOn = null,
-            chainId = evmChainId,
+            chainId = tokenChainId,
             pairAddress = marketDataInfo?.pairAddress ?: "",
             labels = marketDataInfo?.labels ?: emptyList(),
             baseToken = marketDataInfo?.baseToken,
-            quoteToken = marketDataInfo?.quoteToken,
-            priceNative = marketDataInfo?.priceNative ?: "0",
-            priceUsd = marketDataInfo?.priceUsd ?: "0",
+            quoteToken = if (tokenAccountDetails.isNative) null else marketDataInfo?.quoteToken,
+            priceNative = priceNative,
+            priceUsd = priceUsd,
             txns = marketDataInfo?.txns,
             volume = marketDataInfo?.volume,
             priceChange = marketDataInfo?.priceChange,
@@ -124,7 +145,7 @@ object EvmProcessorHelper {
             pairCreatedAt = marketDataInfo?.pairCreatedAt ?: 0,
             info = marketDataInfo?.info ?: TokenMarketData(),
             tokenAccountCategory = TokenHelpers.getTokenAccountCategory(
-                marketDataInfo?.baseToken?.name ?: tokenAccountDetails.name ?: "Unknown",
+                marketDataInfo?.baseToken?.name ?: tokenAccountDetails.name ?: TokenAccountCategories.HOLDINGS.name,
             )
         )
     }
@@ -132,8 +153,13 @@ object EvmProcessorHelper {
     // NFTs
     fun createEvmNftAccountItem(
         nftResult: EvmNftResult,
-        evmChainId: String
+        evmChainId: String?
     ): TokenAccount {
+        val nftKey = listOfNotNull(
+            evmChainId,
+            nftResult.tokenAddress?.lowercase(),
+            nftResult.tokenId,
+        ).joinToString(":")
 
         return TokenAccount(
             name = nftResult.name,
@@ -141,9 +167,9 @@ object EvmProcessorHelper {
             decimals = 18,
             amountDouble = nftResult.amount?.toDouble(),
             priceUsd = nftResult.listPrice?.priceUsd ?: "0",
-            priceNative = "1",
+            priceNative = "0",
             chainId = evmChainId,
-            pubkey = "",
+            pubkey = nftKey,
             pairAddress = "",
             uri = "",
             image = nftResult.normalizedMetadata?.image ?: "",

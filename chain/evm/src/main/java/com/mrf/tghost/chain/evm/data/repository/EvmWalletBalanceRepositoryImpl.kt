@@ -54,7 +54,7 @@ class EvmWalletBalanceRepositoryImpl @Inject constructor(
     private suspend fun getBalanceEvmHttp(publicKey: String, evmChainId: EvmChain): Result<Long> {
         val url = evmHttpResolver.resolveEvmUrl(evmChainId)
         val response: Rpc20Response<String> = RpcRequestFactory.makeRpcRequest(
-            url = url,
+            url = url.first,
             request = getEvmBalanceRequest(publicKey),
             resultSerializer = String.serializer()
         )

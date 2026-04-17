@@ -15,6 +15,7 @@ enum class RpcProviderId {
     OFFICIAL,
     HELIUS,
     ALCHEMY,
+    MORALIS,
     ANKR,
     DRPC,
     ECAD_INFRA,
@@ -94,14 +95,8 @@ enum class SupportedChain(val chain: Chain) {
                     supportedNetworks = listOf(NetworkType.MAINNET),
                 ),
                 RpcProviderOption(
-                    id = RpcProviderId.ANKR,
-                    displayName = "Ankr",
-                    requiresApiKey = true,
-                    supportedNetworks = listOf(NetworkType.MAINNET),
-                ),
-                RpcProviderOption(
-                    id = RpcProviderId.DRPC,
-                    displayName = "dRPC",
+                    id = RpcProviderId.MORALIS,
+                    displayName = "Moralis",
                     requiresApiKey = true,
                     supportedNetworks = listOf(NetworkType.MAINNET),
                 ),
@@ -163,4 +158,9 @@ enum class EvmChain(val chain: String) {
     //LINEA("linea"),
     //ARBITRUM("arbitrum"),
     //OPTIMISM("optimism")
+}
+
+fun EvmChain.toAlchemyNetwork(): String = when (this) {
+    EvmChain.ETHEREUM -> "eth-mainnet"
+    EvmChain.BASE -> "base-mainnet"
 }

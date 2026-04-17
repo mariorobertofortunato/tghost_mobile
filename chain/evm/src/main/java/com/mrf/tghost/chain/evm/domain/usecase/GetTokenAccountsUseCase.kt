@@ -11,6 +11,6 @@ import javax.inject.Inject
 class GetTokenAccountsUseCase @Inject constructor(
     private val tokenAccountsRepository: EvmTokenAccountsRepository
 ){
-    fun evmTokenAccounts(publicKey: String, chainId: EvmChain): Flow<Result<List<EvmTokenAccount>>?> =
+    fun evmTokenAccounts(publicKey: String, chainId: EvmChain?): Flow<Result<List<EvmTokenAccount>>?> =
         tokenAccountsRepository.evmTokenAccounts(publicKey, chainId).onStart { emit(null) }
 }

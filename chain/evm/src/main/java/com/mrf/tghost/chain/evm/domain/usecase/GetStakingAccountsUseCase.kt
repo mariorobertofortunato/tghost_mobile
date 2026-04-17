@@ -10,6 +10,6 @@ import javax.inject.Inject
 class GetStakingAccountsUseCase @Inject constructor(
     private val stakingRepository: EvmStakingRepository
 ) {
-    fun evmStakingAccounts(publicKey: String, evmChainId: String): Flow<Result<List<EvmStakingProtocol>>?> =
+    fun evmStakingAccounts(publicKey: String, evmChainId: String?): Flow<Result<List<EvmStakingProtocol>>?> =
         stakingRepository.evmStakingAccounts(publicKey, evmChainId).onStart { emit(null) }
 }

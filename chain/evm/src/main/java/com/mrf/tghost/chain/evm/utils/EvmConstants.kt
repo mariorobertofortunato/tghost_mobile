@@ -25,5 +25,6 @@ const val BASE_MAINNET_RPC_URL_PUBLIC_NODE = "https://base-rpc.publicnode.com"
 const val ETH_WS_URL = "wss://eth-rpc.publicnode.com"
 const val BASE_WS_URL = "wss://base-rpc.publicnode.com"
 
-const val MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
-const val MORALIS_API_KEY = ""
+const val MORALIS_API_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
+
+const val ALCHEMY_API_BASE_URL = "https://api.g.alchemy.com/data/v1/"

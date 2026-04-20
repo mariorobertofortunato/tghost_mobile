@@ -1,6 +1,7 @@
 package com.mrf.tghost.chain.evm.data.network.mappers
 
 import com.mrf.tghost.chain.evm.data.network.model.AccountDataDto
+import com.mrf.tghost.chain.evm.data.network.model.toDoubleLenient
 import com.mrf.tghost.chain.evm.data.network.model.EvmStakingProtocolDto
 import com.mrf.tghost.chain.evm.data.network.model.PositionDetailsDto
 import com.mrf.tghost.chain.evm.data.network.model.PositionDto
@@ -45,8 +46,8 @@ fun PositionDto.toDomainModel(): Position {
     return Position(
         label = label,
         address = address,
-        balanceUsd = balanceUsd,
-        totalUnclaimedUsdValue = totalUnclaimedUsdValue,
+        balanceUsd = balanceUsd.toDoubleLenient(),
+        totalUnclaimedUsdValue = totalUnclaimedUsdValue.toDoubleLenient(),
         tokens = tokens?.map { it.toDomainModel() },
         positionDetails = positionDetails?.toDomainModel()
     )
@@ -63,8 +64,8 @@ fun PositionTokenDto.toDomainModel(): PositionToken {
         thumbnail = thumbnail,
         balance = balance,
         balanceFormatted = balanceFormatted,
-        usdPrice = usdPrice,
-        usdValue = usdValue
+        usdPrice = usdPrice.toDoubleLenient(),
+        usdValue = usdValue.toDoubleLenient()
     )
 }
 

@@ -199,7 +199,7 @@ class EvmProcessor @Inject constructor(
             }
 
             val tokenAccountsFlow = tokenAccountsUseCase.evmTokenAccounts(publicKey, evmChainId).distinctUntilChanged()
-            val stakingAccountsFlow = stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId?.chain).distinctUntilChanged()
+            val stakingAccountsFlow = stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId).distinctUntilChanged()
             val nftFlow = nftUseCase.evmNFTSAccounts(publicKey, evmChainId).distinctUntilChanged()
 
             combineTransform(
@@ -213,44 +213,66 @@ class EvmProcessor @Inject constructor(
                 }
 
                 val processedTokens = mutableListOf<TokenAccount>()
-                var ethPriceUsdString = ""
-                var ethPriceUsd = 0.0
 
-                // 1. Native EVM token (e.g. ETH / Base ETH)
-                // fetchati insieme egli erc-20
+                val tokenListSnapshot =
+                    if (tokenAccountsFlow.isSuccess()) {
+                        tokenAccountsFlow.data.filter { it.balance > BigDecimal.ZERO }
+                    } else {
+                        emptyList()
+                    }
 
-                // 2. ERC-20 Token Accounts + Native tokens
+                val dexChainsForEth = buildSet {
+                    tokenListSnapshot.forEach {
+                        add(EvmProcessorHelper.resolveDexChainId(it.network, evmChainId?.chain))
+                    }
+                    add(EvmProcessorHelper.resolveDexChainId(null, evmChainId?.chain))
+                }
+
+                val ethUsdByDexChain: Map<String, Double> = coroutineScope {
+                    dexChainsForEth.map { dcid ->
+                        async(Dispatchers.IO) {
+                            val chainKey = when (dcid) {
+                                "ethereum" -> "eth"
+                                "base" -> "base"
+                                else -> "eth"
+                            }
+                            val mint = nativeMintFor(chainKey)
+                            val r = getMarketData(mint, dcid).await()
+                            dcid to if (r.isSuccess()) r.data?.priceUsdDouble ?: 0.0 else 0.0
+                        }
+                    }.awaitAll().toMap()
+                }
+
+                val stakeEthUsd =
+                    ethUsdByDexChain[EvmProcessorHelper.resolveDexChainId(null, evmChainId?.chain)]
+                        ?: 0.0
+
+                // 1. ERC-20 Token Accounts + Native tokens
                 if (tokenAccountsFlow.isSuccess()) {
                     emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId?.name} ERC-20 Token Accounts"))
-                    val tokenList = tokenAccountsFlow.data
-                    val tokenDetails = tokenList
-                        .filter { it.balance > BigDecimal.ZERO }
-                        .map { tokenAccount ->
-                            coroutineScope {
-                                async(Dispatchers.IO) {
-                                    val dexChainId = when (tokenAccount.network) {
-                                        "eth-mainnet" -> "ethereum"
-                                        "base-mainnet" -> "base"
-                                        else -> if (evmChainId?.chain == "eth") "ethereum" else evmChainId?.chain
-                                            ?: "ethereum"
-                                    }
-                                    val marketData =
-                                        getMarketData(
-                                            tokenAccount.contractAddress,
-                                            dexChainId
-                                        ).await()
+                    val tokenDetails = coroutineScope {
+                        tokenListSnapshot.map { tokenAccount ->
+                            async(Dispatchers.IO) {
+                                val dexChainId =
+                                    EvmProcessorHelper.resolveDexChainId(tokenAccount.network, evmChainId?.chain)
+                                val marketData =
+                                    getMarketData(
+                                        tokenAccount.contractAddress,
+                                        dexChainId,
+                                    ).await()
 
-                                    val marketDataInfo = if (marketData.isSuccess()) {
-                                        marketData.data
-                                    } else null
-
-                                    Pair(tokenAccount, marketDataInfo)
+                                val marketDataInfo = if (marketData.isSuccess()) {
+                                    marketData.data
+                                } else {
+                                    null
                                 }
+
+                                Triple(tokenAccount, marketDataInfo, dexChainId)
                             }
-                        }
-                        .awaitAll()
+                        }.awaitAll()
+                    }
                     tokenDetails
-                        .filter { (tokenAccount, marketDataInfo) ->
+                        .filter { (tokenAccount, marketDataInfo, _) ->
                             val marketUsd = marketDataInfo?.priceUsdDouble ?: 0.0
                             val alchemyUsd = tokenAccount.prices
                                 .firstOrNull {
@@ -262,15 +284,17 @@ class EvmProcessor @Inject constructor(
                                 ?.value
                                 ?.toDoubleOrNull() ?: 0.0
                             marketUsd > 0.00001 ||
-                                    alchemyUsd > 0.00001 ||
-                                    (tokenAccount.isNative && tokenAccount.balance > BigDecimal.ZERO)
+                                alchemyUsd > 0.00001 ||
+                                (tokenAccount.isNative && tokenAccount.balance > BigDecimal.ZERO)
                         }
-                        .forEach { (tokenAccount, marketDataInfo) ->
+                        .forEach { (tokenAccount, marketDataInfo, dexChainId) ->
+                            val ethUsd = ethUsdByDexChain[dexChainId] ?: 0.0
                             val tokenItem =
                                 EvmProcessorHelper.createEvmTokenAccountItem(
                                     tokenAccountDetails = tokenAccount,
                                     marketDataInfo = marketDataInfo,
-                                    evmChainId = evmChainId?.chain
+                                    evmChainId = evmChainId?.chain,
+                                    ethUsdPrice = ethUsd,
                                 )
                             processedTokens.add(tokenItem)
                         }
@@ -279,27 +303,28 @@ class EvmProcessor @Inject constructor(
                     emit(EvmChainUpdate.Error("${evmChainId?.name} tokens: ${tokenAccountsFlow.errorMessage}"))
                 }
 
-                /*                                // 3. Staking Accounts
-                                                if (stakingAccountsFlow.isSuccess()) {
-                                                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId.name} Native Staking Accounts"))
-                                                    val stakes = stakingAccountsFlow.data
-                                                    stakes.forEach { stakeAccount ->
-                                                        val posBalance = stakeAccount.position?.balanceUsd ?: 0.0
-                                                        if (posBalance > 0.0) {
-                                                            processedTokens.add(
-                                                                EvmProcessorHelper.createStakedEthAccountItem(
-                                                                    stakeAccount = stakeAccount,
-                                                                    stakedEthAmount = posBalance.toBigDecimal()
-                                                                )
-                                                            )
-                                                            emit(EvmChainUpdate.Success(tokens = processedTokens))
-                                                        }
-                                                    }
-                                                } else if (stakingAccountsFlow.isFailure()) {
-                                                    emit(EvmChainUpdate.Error("${evmChainId.name} Staking Accounts: ${stakingAccountsFlow.errorMessage}"))
-                                                }*/
+                // 2. Staking Accounts
+                if (stakingAccountsFlow.isSuccess()) {
+                    emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId?.name} Native Staking Accounts"))
+                    val stakes = stakingAccountsFlow.data
+                    stakes.forEach { stakeAccount ->
+                        val posBalanceUsd = stakeAccount.position?.balanceUsd ?: 0.0
+                        if (posBalanceUsd > 0.0) {
+                            processedTokens.add(
+                                EvmProcessorHelper.createStakedEthAccountItem(
+                                    stakeAccount = stakeAccount,
+                                    evmChainId = evmChainId?.chain,
+                                    ethUsdPrice = stakeEthUsd,
+                                )
+                            )
+                            emit(EvmChainUpdate.Success(tokens = processedTokens))
+                        }
+                    }
+                } else if (stakingAccountsFlow.isFailure()) {
+                    emit(EvmChainUpdate.Error("${evmChainId?.name} Staking Accounts: ${stakingAccountsFlow.errorMessage}"))
+                }
 
-                // 4. EVM NFTs
+                // 3. EVM NFTs
                 if (nftsFlow.isSuccess()) {
                     emit(EvmChainUpdate.LoadingStage("// Processing ${evmChainId?.name} NFTs Accounts"))
                     val results = nftsFlow.data

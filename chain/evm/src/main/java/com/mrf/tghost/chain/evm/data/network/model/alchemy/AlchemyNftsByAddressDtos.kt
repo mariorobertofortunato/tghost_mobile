@@ -2,6 +2,7 @@ package com.mrf.tghost.chain.evm.data.network.model.alchemy
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 // --- Request (Portfolio NFTs by address)
 
@@ -97,7 +98,7 @@ data class AlchemyNftImageDto(
 @Serializable
 data class AlchemyNftRawDto(
     @SerialName("tokenUri") val tokenUri: String? = null,
-    @SerialName("metadata") val metadata: AlchemyNftRawMetadataDto? = null,
+    @SerialName("metadata") val metadata: JsonElement? = null,
     @SerialName("error") val error: String? = null,
 )
 

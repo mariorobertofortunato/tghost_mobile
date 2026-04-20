@@ -1,9 +1,11 @@
 package com.mrf.tghost.chain.evm.data.network.resolver.http
 
-import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_BASE_URL
+import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_URL
+import com.mrf.tghost.chain.evm.utils.ALCHEMY_RPC_BASE_URL
+import com.mrf.tghost.chain.evm.utils.ALCHEMY_RPC_ETHEREUM_URL
 import com.mrf.tghost.chain.evm.utils.BASE_MAINNET_RPC_URL_PUBLIC_NODE
 import com.mrf.tghost.chain.evm.utils.ETHEREUM_MAINNET_RPC_URL_PUBLIC_NODE
-import com.mrf.tghost.chain.evm.utils.MORALIS_API_BASE_URL
+import com.mrf.tghost.chain.evm.utils.MORALIS_API_URL
 import com.mrf.tghost.domain.model.EvmChain
 import com.mrf.tghost.domain.model.NetworkType
 import com.mrf.tghost.domain.model.RpcPreference
@@ -16,6 +18,28 @@ import javax.inject.Inject
 class EvmHttpResolver @Inject constructor(
     private val preferencesRepository: PreferencesRepository,
 ) {
+
+    suspend fun resolveAlchemyRpcUrl(evmChainId: EvmChain?): String {
+        val preference: RpcPreference =
+            preferencesRepository.getRpcPreference(SupportedChainId.EVM).first()
+        val apiKey: String? =
+            preferencesRepository.getRpcProviderApiKey(preference.providerId).first()
+
+        require(!apiKey.isNullOrBlank()) {
+            "Missing API key for Alchemy EVM RPC provider"
+        }
+        if (preference.networkType != NetworkType.MAINNET) {
+            throw IllegalArgumentException("Alchemy EVM resolver supports MAINNET only")
+        }
+        val baseRpcUrl = when (evmChainId) {
+            EvmChain.ETHEREUM -> ALCHEMY_RPC_ETHEREUM_URL
+            EvmChain.BASE -> ALCHEMY_RPC_BASE_URL
+            else -> ALCHEMY_RPC_ETHEREUM_URL
+        }
+
+        return "$baseRpcUrl$apiKey"
+
+    }
 
     suspend fun resolveEvmUrl(evmChainId: EvmChain?): Pair<String, String?> {
         val preference: RpcPreference =
@@ -33,23 +57,21 @@ class EvmHttpResolver @Inject constructor(
 
     private fun evmAlchemyUrl(
         networkType: NetworkType,
-        apiKey: String?,
-        //evmChainId: EvmChain
+        apiKey: String?
     ): Pair<String, String> {
         require(!apiKey.isNullOrBlank()) {
-            "Missing API key for Alchemy EVM RPC provider"
+            "Missing API key for Alchemy provider"
         }
         if (networkType != NetworkType.MAINNET) {
             throw IllegalArgumentException("Alchemy EVM resolver supports MAINNET only")
         }
-/*        val baseUrl = when (evmChainId) {
-            EvmChain.ETHEREUM -> ETHEREUM_MAINNET_RPC_URL_ALCHEMY
-            EvmChain.BASE -> BASE_MAINNET_RPC_URL_ALCHEMY
-        }*/
-        return Pair(ALCHEMY_API_BASE_URL, apiKey)
+        return Pair(ALCHEMY_API_URL, apiKey)
     }
 
-    private fun evmPublicNodeUrl(networkType: NetworkType, evmChainId: EvmChain?): Pair<String, String?>  {
+    private fun evmPublicNodeUrl(
+        networkType: NetworkType,
+        evmChainId: EvmChain?
+    ): Pair<String, String?> {
         if (networkType != NetworkType.MAINNET) {
             throw IllegalArgumentException("PublicNode EVM resolver supports MAINNET only")
         }
@@ -63,13 +85,13 @@ class EvmHttpResolver @Inject constructor(
     private fun evmMoralisUrl(
         networkType: NetworkType,
         apiKey: String?,
-    ): Pair<String, String>  {
+    ): Pair<String, String> {
         require(!apiKey.isNullOrBlank()) {
-            "Missing API key for Alchemy EVM RPC provider"
+            "Missing API key for Moralis provider"
         }
         if (networkType != NetworkType.MAINNET) {
             throw IllegalArgumentException("PublicNode EVM resolver supports MAINNET only")
         }
-        return Pair(MORALIS_API_BASE_URL, apiKey)
+        return Pair(MORALIS_API_URL, apiKey)
     }
 }

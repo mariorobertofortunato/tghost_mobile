@@ -7,6 +7,12 @@ import com.mrf.tghost.chain.evm.domain.model.EvmNftAttribute
 import com.mrf.tghost.chain.evm.domain.model.EvmNftNormalizedMetadata
 import com.mrf.tghost.chain.evm.domain.model.EvmNftResponse
 import com.mrf.tghost.chain.evm.domain.model.EvmNftResult
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 fun AlchemyNftsByAddressResponseDto.toEvmNftResponse(): EvmNftResponse {
     val data = this.data
@@ -24,7 +30,7 @@ fun AlchemyNftsByAddressResponseDto.toEvmNftResponse(): EvmNftResponse {
 private val alchemyTokenIndexOnlyName = Regex("^#\\d+$")
 
 private fun AlchemyOwnedNftDto.resolveDisplayName(): String? {
-    val tokenLabel = name ?: raw?.metadata?.name
+    val tokenLabel = name ?: raw?.metadata?.metadataString("name")
     val collectionOrContractName = contract?.name
         ?: contract?.openSeaMetadata?.collectionName
         ?: collection?.name
@@ -41,14 +47,14 @@ private fun AlchemyOwnedNftDto.toEvmNftResult(): EvmNftResult {
         ?: image?.pngUrl
         ?: image?.thumbnailUrl
         ?: image?.originalUrl
-        ?: raw?.metadata?.image
+        ?: raw?.metadata?.metadataString("image")
         ?: contract?.openSeaMetadata?.imageUrl
 
     val metaName = resolveDisplayName()
-    val metaDesc = description ?: raw?.metadata?.description ?: contract?.openSeaMetadata?.description
+    val metaDesc = description ?: raw?.metadata?.metadataString("description") ?: contract?.openSeaMetadata?.description
     val externalUrl = collection?.externalUrl
         ?: contract?.openSeaMetadata?.externalUrl
-        ?: raw?.metadata?.externalUrl
+        ?: raw?.metadata?.metadataString("external_url")
     val spam = contract?.isSpam == true
 
     val floor = contract?.openSeaMetadata?.floorPrice?.toString()
@@ -78,11 +84,11 @@ private fun AlchemyOwnedNftDto.toEvmNftResult(): EvmNftResult {
         normalizedMetadata = EvmNftNormalizedMetadata(
             name = metaName,
             description = metaDesc,
-            animationUrl = raw?.metadata?.animationUrl,
+            animationUrl = raw?.metadata?.metadataString("animation_url"),
             externalLink = externalUrl,
             externalUrl = externalUrl,
             image = imageUrl,
-            attributes = raw?.metadata?.attributes?.map { it.toDomain() }.orEmpty(),
+            attributes = raw?.metadata?.metadataAttributes().orEmpty(),
         ),
         collectionLogo = contract?.openSeaMetadata?.imageUrl,
         collectionBannerImage = collection?.bannerImageUrl ?: contract?.openSeaMetadata?.bannerImageUrl,
@@ -100,6 +106,31 @@ private fun AlchemyOwnedNftDto.toEvmNftResult(): EvmNftResult {
         lastSale = null,
         media = null,
     )
+}
+
+private fun JsonElement?.metadataString(key: String): String? {
+    val obj = this as? JsonObject ?: return null
+    val prim = obj[key] as? JsonPrimitive ?: return null
+    return prim.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+private fun JsonElement?.metadataAttributes(): List<EvmNftAttribute>? {
+    val obj = this as? JsonObject ?: return null
+    val array = obj["attributes"] as? JsonArray ?: return null
+    return array.mapNotNull { element ->
+        val attrObj = element as? JsonObject ?: return@mapNotNull null
+        val traitType = (attrObj["trait_type"] as? JsonPrimitive)?.contentOrNull
+        val value = (attrObj["value"] as? JsonPrimitive)?.contentOrNull
+        if (traitType == null && value == null) return@mapNotNull null
+        EvmNftAttribute(
+            traitType = traitType,
+            value = value,
+            displayType = null,
+            maxValue = null,
+            traitCount = null,
+            order = null,
+        )
+    }
 }
 
 private fun AlchemyNftAttributeDto.toDomain(): EvmNftAttribute =

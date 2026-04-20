@@ -7,8 +7,8 @@ import com.mrf.tghost.chain.evm.data.network.model.moralis.MoralisWalletTokensRe
 import com.mrf.tghost.chain.evm.data.network.resolver.http.EvmHttpResolver
 import com.mrf.tghost.chain.evm.domain.model.EvmTokenAccount
 import com.mrf.tghost.chain.evm.domain.repository.EvmTokenAccountsRepository
-import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_BASE_URL
-import com.mrf.tghost.chain.evm.utils.MORALIS_API_BASE_URL
+import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_URL
+import com.mrf.tghost.chain.evm.utils.MORALIS_API_URL
 import com.mrf.tghost.data.network.client.KtorClient
 import com.mrf.tghost.domain.model.EvmChain
 import com.mrf.tghost.domain.model.Result
@@ -31,6 +31,9 @@ import javax.inject.Inject
 class EvmTokenAccountsRepositoryImpl @Inject constructor(
     private val evmHttpResolver: EvmHttpResolver,
 ) : EvmTokenAccountsRepository {
+    private companion object {
+        const val ALCHEMY_MAX_PAGES = 100
+    }
 
     @Serializable
     private data class AlchemyAddressRequest(
@@ -44,6 +47,7 @@ class EvmTokenAccountsRepositoryImpl @Inject constructor(
         val withMetadata: Boolean = true,
         val includeNativeTokens: Boolean = true,
         val includeErc20Tokens: Boolean = true,
+        val pageKey: String? = null,
     )
 
     override fun evmTokenAccounts(publicKey: String, chainId: EvmChain?): Flow<Result<List<EvmTokenAccount>>?> = flow {
@@ -58,31 +62,55 @@ class EvmTokenAccountsRepositoryImpl @Inject constructor(
                 val baseUrl = evmHttpResolver.resolveEvmUrl(chainId)
                 val url: String
                 when (baseUrl.first) {
-                    MORALIS_API_BASE_URL -> {
+                    MORALIS_API_URL -> {
                         val moralisChain = chainId?.chain ?: "eth"
-                        url = "${MORALIS_API_BASE_URL}/wallets/$address/tokens?chain=$moralisChain"
+                        url = "${MORALIS_API_URL}/wallets/$address/tokens?chain=$moralisChain"
                         val response = KtorClient.httpClient.get(url) {
                             header("X-API-Key", baseUrl.second?.trim().orEmpty())
                         }.body<MoralisWalletTokensResponseDto>()
                         Result.Success(response.toEvmTokenAccounts(chainId ?: EvmChain.ETHEREUM))
                     }
-                    ALCHEMY_API_BASE_URL -> {
+                    ALCHEMY_API_URL -> {
                         url = "${baseUrl.first+baseUrl.second}/assets/tokens/by-address"
                         val networks = chainId?.let { listOf(it.toAlchemyNetwork()) } ?: EvmChain.entries.map { it.toAlchemyNetwork() }
-                        val response = KtorClient.httpClient.post(url) {
-                            contentType(ContentType.Application.Json)
-                            setBody(
-                                AlchemyTokenAccountsRequest(
-                                    addresses = listOf(
-                                        AlchemyAddressRequest(
-                                            address = address,
-                                            networks = networks,
-                                        )
-                                    ),
+                        val allTokens = mutableListOf<com.mrf.tghost.chain.evm.data.network.model.alchemy.AlchemyTokenDto>()
+                        var pageKey: String? = null
+                        val seenPageKeys = mutableSetOf<String>()
+                        var pageCount = 0
+                        do {
+                            pageCount++
+                            val response = KtorClient.httpClient.post(url) {
+                                contentType(ContentType.Application.Json)
+                                setBody(
+                                    AlchemyTokenAccountsRequest(
+                                        addresses = listOf(
+                                            AlchemyAddressRequest(
+                                                address = address,
+                                                networks = networks,
+                                            )
+                                        ),
+                                        pageKey = pageKey,
+                                    )
                                 )
-                            )
-                        }.body<AlchemyTokensByAddressResponseDto>()
-                        Result.Success(response.data?.tokens?.toDomainModelFromAlchemy().orEmpty())
+                            }.body<AlchemyTokensByAddressResponseDto>()
+                            val tokensPage = response.data?.tokens.orEmpty()
+                            allTokens += tokensPage
+                            val nextPageKey = response.data?.pageKey
+                            if (nextPageKey.isNullOrBlank()) {
+                                pageKey = null
+                                break
+                            }
+                            if (!seenPageKeys.add(nextPageKey)) {
+                                pageKey = null
+                                break
+                            }
+                            if (pageCount >= ALCHEMY_MAX_PAGES) {
+                                pageKey = null
+                                break
+                            }
+                            pageKey = nextPageKey
+                        } while (!pageKey.isNullOrBlank())
+                        Result.Success(allTokens.toDomainModelFromAlchemy())
                     }
                     else -> {
                         Result.Failure("Unknown RPC provider")
@@ -95,48 +123,4 @@ class EvmTokenAccountsRepositoryImpl @Inject constructor(
 
         }
 
-
-
-/*    private suspend fun getEvmTokenAccountsHttp(address: String, chainId: EvmChain): Result<List<EvmTokenAccount>> =
-        withContext(Dispatchers.IO) {
-            val url = evmHttpResolver.resolveEvmUrl(chainId)
-            val response: Rpc20Response<EvmTokenBalancesDto> =
-                RpcRequestFactory.makeRpcRequest(
-                    url = url,
-                    request = getEvmTokenAccountsRequest(address),
-                    resultSerializer = EvmTokenBalancesDto.serializer()
-                )
-
-            if (response.error != null) {
-                return@withContext Result.Failure("${response.error?.code}, ${response.error?.message}")
-            }
-
-            val alchemyResult = response.result
-            if (alchemyResult != null) {
-                val domainList = alchemyResult.tokenBalances.map { token ->
-                    val hexBalance = token.tokenBalance
-                    val decimalBalance = try {
-                        if (!hexBalance.isNullOrEmpty() && hexBalance.startsWith("0x")) {
-                            BigInteger(hexBalance.substring(2), 16).toString()
-                        } else {
-                            hexBalance
-                        }
-                    } catch (e: Exception) {
-                        "0"
-                    }
-
-                    EvmTokenAccount(
-                        contractAddress = token.contractAddress,
-                        balance = decimalBalance?.toBigDecimal() ?: BigInteger.ZERO.toBigDecimal(),
-                        rawBalance = decimalBalance ?: "0",
-                        name = null, // Will be fetched later
-                        symbol = null, // Will be fetched later
-                        decimals = null // Will be fetched later
-                    )
-                }
-                Result.Success(domainList)
-            } else {
-                Result.Success(emptyList())
-            }
-        }*/
 }

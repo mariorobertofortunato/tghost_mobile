@@ -9,8 +9,8 @@ import com.mrf.tghost.chain.evm.data.network.model.moralis.MoralisEvmNftDto
 import com.mrf.tghost.chain.evm.data.network.resolver.http.EvmHttpResolver
 import com.mrf.tghost.chain.evm.domain.model.EvmNftResponse
 import com.mrf.tghost.chain.evm.domain.repository.EvmNftRepository
-import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_BASE_URL
-import com.mrf.tghost.chain.evm.utils.MORALIS_API_BASE_URL
+import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_URL
+import com.mrf.tghost.chain.evm.utils.MORALIS_API_URL
 import com.mrf.tghost.data.network.client.KtorClient
 import com.mrf.tghost.domain.model.EvmChain
 import com.mrf.tghost.domain.model.Result
@@ -49,21 +49,21 @@ class EvmNftRepositoryImpl @Inject constructor(
             try {
                 val baseUrl = evmHttpResolver.resolveEvmUrl(chainId)
                 when (baseUrl.first) {
-                    MORALIS_API_BASE_URL -> {
+                    MORALIS_API_URL -> {
                         val apiKey = baseUrl.second?.trim().orEmpty()
                         if (apiKey.isEmpty()) {
                             return@withContext Result.Failure("Moralis API key missing.")
                         }
                         val moralisChain = chainId?.chain ?: "eth"
                         val url =
-                            "${MORALIS_API_BASE_URL}/$address/nft?chain=$moralisChain&format=decimal&normalizeMetadata=true"
+                            "${MORALIS_API_URL}/$address/nft?chain=$moralisChain&format=decimal&normalizeMetadata=true"
                         val response = KtorClient.httpClient.get(url) {
                             header("X-API-Key", apiKey)
                         }.body<MoralisEvmNftDto>()
                         Result.Success(response.toDomainModel())
                     }
 
-                    ALCHEMY_API_BASE_URL -> {
+                    ALCHEMY_API_URL -> {
                         val apiKey = baseUrl.second?.trim().orEmpty()
                         if (apiKey.isEmpty()) {
                             return@withContext Result.Failure("Alchemy API key missing.")

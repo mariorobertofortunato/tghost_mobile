@@ -20,14 +20,60 @@ fun getEvmBalanceRequest(
         id = UUID.randomUUID().toString()
     )
 
-fun getEvmTokenOnChainMetadataRequest(
-    contractAddress: String
+fun getAlchemyEvmAssetTransfersFromRequest(
+    address: String,
+    includeInternal: Boolean = true,
+    pageKey: String? = null,
 ): JsonRpc20Request {
     return JsonRpc20Request(
-        method = "alchemy_getTokenMetadata",
+        method = "alchemy_getAssetTransfers",
         params = buildJsonArray {
-            add(contractAddress)
+            addJsonObject {
+                put("fromAddress", address)
+                put("fromBlock", "0x0")
+                put("excludeZeroValue", true)
+                put("withMetadata", true)
+                put("category", buildJsonArray {
+                    add("external")
+                    if (includeInternal) add("internal")
+                    add("erc20")
+                    add("erc721")
+                    add("erc1155")
+                })
+                put("order", "desc")
+                put("maxCount", "0xA") //
+                pageKey?.takeIf { it.isNotBlank() }?.let { put("pageKey", it) }
+            }
         },
-        id = UUID.randomUUID().toString()
+        id = UUID.randomUUID().toString(),
+    )
+}
+
+fun getAlchemyEvmAssetTransfersToRequest(
+    address: String,
+    includeInternal: Boolean = true,
+    pageKey: String? = null,
+): JsonRpc20Request {
+    return JsonRpc20Request(
+        method = "alchemy_getAssetTransfers",
+        params = buildJsonArray {
+            addJsonObject {
+                put("toAddress", address)
+                put("fromBlock", "0x0")
+                put("excludeZeroValue", true)
+                put("withMetadata", true)
+                put("category", buildJsonArray {
+                    add("external")
+                    if (includeInternal) add("internal")
+                    add("erc20")
+                    add("erc721")
+                    add("erc1155")
+                })
+                put("order", "desc")
+                put("maxCount", "0xA") //
+                pageKey?.takeIf { it.isNotBlank() }?.let { put("pageKey", it) }
+            }
+        },
+        id = UUID.randomUUID().toString(),
     )
 }

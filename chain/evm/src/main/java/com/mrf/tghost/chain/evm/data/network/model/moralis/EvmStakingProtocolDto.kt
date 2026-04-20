@@ -1,12 +1,9 @@
-package com.mrf.tghost.chain.evm.data.network.model
+package com.mrf.tghost.chain.evm.data.network.model.moralis
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNames
-
-
-//typealias DefiPositionsResponseDto = List<EvmStakingProtocolDto>
 
 @Serializable
 data class EvmStakingProtocolDto(

@@ -9,8 +9,8 @@ const val LINEA_ETH_TOKEN_MINT = "0xE57eBd2d67B462E9926e04a8e3162D52Df17F8d2"
 
 // ----------------- RPCs
 // Alchemy
-const val ETHEREUM_MAINNET_RPC_URL_ALCHEMY = "https://eth-mainnet.g.alchemy.com/v2/"
-const val BASE_MAINNET_RPC_URL_ALCHEMY = "https://base-mainnet.g.alchemy.com/v2/"
+const val ALCHEMY_RPC_ETHEREUM_URL = "https://eth-mainnet.g.alchemy.com/v2/"
+const val ALCHEMY_RPC_BASE_URL = "https://base-mainnet.g.alchemy.com/v2/"
 // Ankr EVM
 const val ETHEREUM_MAINNET_RPC_URL_ANKR = "https://rpc.ankr.com/eth"
 const val BASE_MAINNET_RPC_URL_ANKR = "https://rpc.ankr.com/base"
@@ -25,6 +25,7 @@ const val BASE_MAINNET_RPC_URL_PUBLIC_NODE = "https://base-rpc.publicnode.com"
 const val ETH_WS_URL = "wss://eth-rpc.publicnode.com"
 const val BASE_WS_URL = "wss://base-rpc.publicnode.com"
 
-const val MORALIS_API_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
 
-const val ALCHEMY_API_BASE_URL = "https://api.g.alchemy.com/data/v1/"
+// ----------------- API
+const val MORALIS_API_URL = "https://deep-index.moralis.io/api/v2.2"
+const val ALCHEMY_API_URL = "https://api.g.alchemy.com/data/v1/"

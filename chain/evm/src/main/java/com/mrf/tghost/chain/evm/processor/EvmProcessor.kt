@@ -3,6 +3,7 @@ package com.mrf.tghost.chain.evm.processor
 import com.mrf.tghost.chain.evm.domain.usecase.GetNftUseCase
 import com.mrf.tghost.chain.evm.domain.usecase.GetStakingAccountsUseCase
 import com.mrf.tghost.chain.evm.domain.usecase.GetTokenAccountsUseCase
+import com.mrf.tghost.chain.evm.domain.usecase.GetTxUseCase
 import com.mrf.tghost.chain.evm.domain.usecase.GetWalletBalanceUseCase
 import com.mrf.tghost.chain.evm.processor.EvmProcessorHelper.isValidNft
 import com.mrf.tghost.data.utils.MARKET_DATA_URL_DEXSCREENER
@@ -33,6 +34,7 @@ import com.mrf.tghost.chain.evm.processor.EvmProcessorHelper.nativeMintFor
 import com.mrf.tghost.domain.model.RpcPreference
 import com.mrf.tghost.domain.model.RpcProviderId
 import com.mrf.tghost.domain.model.SupportedChainId
+import com.mrf.tghost.domain.model.Transaction
 import com.mrf.tghost.domain.repository.PreferencesRepository
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -46,6 +48,7 @@ class EvmProcessor @Inject constructor(
     private val stakingAccountsUseCase: GetStakingAccountsUseCase,
     private val nftUseCase: GetNftUseCase,
     private val getMarketDataUseCase: GetMarketDataUseCase,
+    private val getTxUseCase: GetTxUseCase,
     private val preferencesRepository: PreferencesRepository,
 ) {
 
@@ -54,12 +57,16 @@ class EvmProcessor @Inject constructor(
         val provider: RpcPreference =
             preferencesRepository.getRpcPreference(SupportedChainId.EVM).first()
         val chainTokens = mutableMapOf<EvmChain, List<TokenAccount>>()
+        val chainTx = mutableMapOf<EvmChain, List<Transaction>>()
         val mutex = Mutex()
 
         when (provider.providerId) {
             RpcProviderId.ALCHEMY -> {
-                // per tutte le chain: una sola chiamata per fetchare token accounts (compresi native) + una sola chiamata per nft + una sola chiamata per trnasfers
+                // per tutte le chain: una sola chiamata API per fetchare token accounts (compresi native) + una sola chiamata per nft + una sola chiamata per trnasfers
                 // No defi positions
+                // Le tx sono fetchate per-chain internamente al repository (perchè alchemy è un cazzo di brodo)
+                var latestTokens: List<TokenAccount> = emptyList()
+                var latestTransactions: List<Transaction> = emptyList()
 
                 processEvmChain(evmChainId = null, publicKey = publicKey).collect { update ->
                     when (update) {
@@ -68,7 +75,18 @@ class EvmProcessor @Inject constructor(
                         }
 
                         is EvmChainUpdate.Success -> {
-                            send(WalletUpdate.Success(tokens = update.tokens))
+                            if (update.tokens.isNotEmpty() || latestTokens.isEmpty()) {
+                                latestTokens = update.tokens
+                            }
+                            if (update.transactions.isNotEmpty() || latestTransactions.isEmpty()) {
+                                latestTransactions = update.transactions
+                            }
+                            send(
+                                WalletUpdate.Success(
+                                    tokens = latestTokens,
+                                    transactions = latestTransactions,
+                                )
+                            )
                         }
 
                         is EvmChainUpdate.Error -> {
@@ -97,10 +115,18 @@ class EvmProcessor @Inject constructor(
 
                                 is EvmChainUpdate.Success -> {
                                     val mergedTokens = mutex.withLock {
-                                        chainTokens[chain] = update.tokens
+                                        if (update.tokens.isNotEmpty() || !chainTokens.containsKey(chain)) {
+                                            chainTokens[chain] = update.tokens
+                                        }
                                         chainTokens.values.flatten()
                                     }
-                                    send(WalletUpdate.Success(tokens = mergedTokens))
+                                    val mergedTx = mutex.withLock {
+                                        if (update.transactions.isNotEmpty() || !chainTx.containsKey(chain)) {
+                                            chainTx[chain] = update.transactions
+                                        }
+                                        chainTx.values.flatten()
+                                    }
+                                    send(WalletUpdate.Success(tokens = mergedTokens, transactions = mergedTx))
                                     send(WalletUpdate.LoadingStage(null))
                                 }
 
@@ -117,7 +143,7 @@ class EvmProcessor @Inject constructor(
 
             else -> {
                 // una chiamata PER OGNI CHAIN rpc eth_getBalance
-                // No erc-20, no nft, no defi, no transfers
+                // No erc-20, no nft, no defi, no activity
                 EvmChain.entries.forEach { chainId ->
                     launch {
                         suspend fun getMarketData(address: String): Deferred<Result<TokenMarketDataInfo?>> {
@@ -201,13 +227,16 @@ class EvmProcessor @Inject constructor(
             val tokenAccountsFlow = tokenAccountsUseCase.evmTokenAccounts(publicKey, evmChainId).distinctUntilChanged()
             val stakingAccountsFlow = stakingAccountsUseCase.evmStakingAccounts(publicKey, evmChainId).distinctUntilChanged()
             val nftFlow = nftUseCase.evmNFTSAccounts(publicKey, evmChainId).distinctUntilChanged()
+            val activityFlow = getTxUseCase.txEvm(publicKey, evmChainId).distinctUntilChanged()
+
 
             combineTransform(
                 tokenAccountsFlow,
                 stakingAccountsFlow,
-                nftFlow
-            ) { tokenAccountsFlow, stakingAccountsFlow, nftsFlow ->
-                if (tokenAccountsFlow == null || stakingAccountsFlow == null || nftsFlow == null) {
+                nftFlow,
+                activityFlow
+            ) { tokenAccountsFlow, stakingAccountsFlow, nftsFlow, activityFlow ->
+                if (tokenAccountsFlow == null || stakingAccountsFlow == null || nftsFlow == null || activityFlow == null) {
                     emit(EvmChainUpdate.LoadingStage("// Synchronizing ${evmChainId?.name} data…"))
                     return@combineTransform
                 }
@@ -345,6 +374,14 @@ class EvmProcessor @Inject constructor(
                     emit(EvmChainUpdate.Error("${evmChainId?.name} NFTs ${nftsFlow.errorMessage}"))
                 }
 
+                // 4. EVM transactions
+                if (activityFlow.isSuccess()) {
+                    emit(EvmChainUpdate.LoadingStage("// Processing transactions"))
+                    emit(EvmChainUpdate.Success(transactions = activityFlow.data))
+                } else if (activityFlow.isFailure()) {
+                    emit(EvmChainUpdate.Error("Transactions: ${activityFlow.errorMessage}"))
+                }
+
                 emit(EvmChainUpdate.LoadingStage(null))
             }
                 .catch {
@@ -359,6 +396,7 @@ sealed class EvmChainUpdate {
     data class LoadingStage(val stage: String?) : EvmChainUpdate()
     data class Error(val message: String) : EvmChainUpdate()
     data class Success(
-        val tokens: List<TokenAccount>
+        val tokens: List<TokenAccount> = emptyList(),
+        val transactions: List<Transaction> = emptyList()
     ) : EvmChainUpdate()
 }

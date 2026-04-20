@@ -44,24 +44,6 @@ private fun MoralisWalletTokenDto.toEvmTokenAccount(chainId: EvmChain): EvmToken
     )
 }
 
-/*fun List<EvmTokenAccountDetailsDto>.toDomainModel(): List<EvmTokenAccount> {
-    return this.map { it ->
-        it.toDomainModel()
-    }
-}
-
-
-fun EvmTokenAccountDetailsDto.toDomainModel(): EvmTokenAccount {
-    return EvmTokenAccount(
-        contractAddress = contractAddress,
-        name = name,
-        symbol = symbol,
-        decimals = decimals,
-        balance = balance?.toBigDecimal() ?: BigDecimal.ZERO,
-        rawBalance = balance ?: "0"
-    )
-}*/
-
 fun List<AlchemyTokenDto>.toDomainModelFromAlchemy(): List<EvmTokenAccount> {
     return this.map { token ->
         val isNative = token.tokenAddress.isNullOrBlank()

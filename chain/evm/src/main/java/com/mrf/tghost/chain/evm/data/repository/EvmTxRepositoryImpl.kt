@@ -2,11 +2,14 @@ package com.mrf.tghost.chain.evm.data.repository
 
 import com.mrf.tghost.chain.evm.data.network.http.rpcrequests.getAlchemyEvmAssetTransfersFromRequest
 import com.mrf.tghost.chain.evm.data.network.http.rpcrequests.getAlchemyEvmAssetTransfersToRequest
+import com.mrf.tghost.chain.evm.data.network.mappers.normalizeEvmTransactions
 import com.mrf.tghost.chain.evm.data.network.mappers.toDomainModel
 import com.mrf.tghost.chain.evm.data.network.mappers.toDomainTransactionsFromAlchemy
 import com.mrf.tghost.chain.evm.data.network.model.alchemy.AlchemyAssetTransferDto
 import com.mrf.tghost.chain.evm.data.network.model.alchemy.AlchemyAssetTransfersResponseDto
 import com.mrf.tghost.chain.evm.data.network.model.moralis.MoralisActivityResponseDto
+import com.mrf.tghost.chain.evm.data.network.pagination.AlchemyCursorPage
+import com.mrf.tghost.chain.evm.data.network.pagination.paginateAlchemyByCursor
 import com.mrf.tghost.chain.evm.data.network.resolver.http.EvmHttpResolver
 import com.mrf.tghost.chain.evm.domain.repository.EvmTxRepository
 import com.mrf.tghost.chain.evm.utils.ALCHEMY_API_URL
@@ -30,9 +33,6 @@ import javax.inject.Inject
 class EvmTxRepositoryImpl @Inject constructor(
     private val evmHttpResolver: EvmHttpResolver,
 ) : EvmTxRepository {
-    private companion object {
-        const val ALCHEMY_MAX_PAGES = 100
-    }
 
     override fun txEvm(publicKey: String, chainId: EvmChain?
     ): Flow<Result<List<Transaction>>?> = flow {
@@ -56,7 +56,7 @@ class EvmTxRepositoryImpl @Inject constructor(
                             response.toDomainModel(
                                 accountAddress = address,
                                 chainId = chainId ?: EvmChain.ETHEREUM,
-                            )
+                            ).normalizeEvmTransactions()
                         )
                     }
                     ALCHEMY_API_URL -> {
@@ -77,21 +77,13 @@ class EvmTxRepositoryImpl @Inject constructor(
                                 outgoing = false,
                                 includeInternal = includeInternal,
                             )
-                            val chainTransfers = (outgoingTransfers + incomingTransfers)
-                                .distinctBy { "${it.hash}:${it.logIndex}:${it.category}" }
+                            val chainTransfers = outgoingTransfers + incomingTransfers
                             allTransactions += chainTransfers.toDomainTransactionsFromAlchemy(
                                 accountAddress = address,
                                 chainId = evmChain,
                             )
                         }
-                        val merged = allTransactions
-                            .distinctBy { "${it.chain}:${it.id}:${it.timestamp}:${it.blockNumber}" }
-                            .sortedWith(
-                                compareByDescending<Transaction> { it.timestamp ?: Long.MIN_VALUE }
-                                    .thenByDescending { it.blockNumber ?: Long.MIN_VALUE }
-                                    .thenByDescending { it.id }
-                            )
-                        Result.Success(merged)
+                        Result.Success(allTransactions.normalizeEvmTransactions())
                     }
                     else -> {
                         Result.Success(emptyList())
@@ -110,12 +102,7 @@ class EvmTxRepositoryImpl @Inject constructor(
         outgoing: Boolean,
         includeInternal: Boolean,
     ): List<AlchemyAssetTransferDto> {
-        val allTransfers = mutableListOf<AlchemyAssetTransferDto>()
-        var pageKey: String? = null
-        val seenPageKeys = mutableSetOf<String>()
-        var pageCount = 0
-        do {
-            pageCount++
+        return paginateAlchemyByCursor { pageKey ->
             val request = if (outgoing) {
                 getAlchemyEvmAssetTransfersFromRequest(
                     address = address,
@@ -134,22 +121,10 @@ class EvmTxRepositoryImpl @Inject constructor(
                 request = request,
                 resultSerializer = AlchemyAssetTransfersResponseDto.serializer(),
             )
-            allTransfers += response.result?.transfers.orEmpty()
-            val nextPageKey = response.result?.pageKey
-            if (nextPageKey.isNullOrBlank()) {
-                pageKey = null
-                break
-            }
-            if (!seenPageKeys.add(nextPageKey)) {
-                pageKey = null
-                break
-            }
-            if (pageCount >= ALCHEMY_MAX_PAGES) {
-                pageKey = null
-                break
-            }
-            pageKey = nextPageKey
-        } while (!pageKey.isNullOrBlank())
-        return allTransfers
+            AlchemyCursorPage(
+                items = response.result?.transfers.orEmpty(),
+                nextCursor = response.result?.pageKey,
+            )
+        }
     }
 }

@@ -3,6 +3,8 @@ package com.mrf.tghost.chain.evm.data.repository
 import com.mrf.tghost.chain.evm.data.network.mappers.toDomainModelFromAlchemy
 import com.mrf.tghost.chain.evm.data.network.mappers.toEvmTokenAccounts
 import com.mrf.tghost.chain.evm.data.network.model.alchemy.AlchemyTokensByAddressResponseDto
+import com.mrf.tghost.chain.evm.data.network.pagination.AlchemyCursorPage
+import com.mrf.tghost.chain.evm.data.network.pagination.paginateAlchemyByCursor
 import com.mrf.tghost.chain.evm.data.network.model.moralis.MoralisWalletTokensResponseDto
 import com.mrf.tghost.chain.evm.data.network.resolver.http.EvmHttpResolver
 import com.mrf.tghost.chain.evm.domain.model.EvmTokenAccount
@@ -31,9 +33,6 @@ import javax.inject.Inject
 class EvmTokenAccountsRepositoryImpl @Inject constructor(
     private val evmHttpResolver: EvmHttpResolver,
 ) : EvmTokenAccountsRepository {
-    private companion object {
-        const val ALCHEMY_MAX_PAGES = 100
-    }
 
     @Serializable
     private data class AlchemyAddressRequest(
@@ -73,12 +72,7 @@ class EvmTokenAccountsRepositoryImpl @Inject constructor(
                     ALCHEMY_API_URL -> {
                         url = "${baseUrl.first+baseUrl.second}/assets/tokens/by-address"
                         val networks = chainId?.let { listOf(it.toAlchemyNetwork()) } ?: EvmChain.entries.map { it.toAlchemyNetwork() }
-                        val allTokens = mutableListOf<com.mrf.tghost.chain.evm.data.network.model.alchemy.AlchemyTokenDto>()
-                        var pageKey: String? = null
-                        val seenPageKeys = mutableSetOf<String>()
-                        var pageCount = 0
-                        do {
-                            pageCount++
+                        val allTokens = paginateAlchemyByCursor { pageKey ->
                             val response = KtorClient.httpClient.post(url) {
                                 contentType(ContentType.Application.Json)
                                 setBody(
@@ -93,23 +87,11 @@ class EvmTokenAccountsRepositoryImpl @Inject constructor(
                                     )
                                 )
                             }.body<AlchemyTokensByAddressResponseDto>()
-                            val tokensPage = response.data?.tokens.orEmpty()
-                            allTokens += tokensPage
-                            val nextPageKey = response.data?.pageKey
-                            if (nextPageKey.isNullOrBlank()) {
-                                pageKey = null
-                                break
-                            }
-                            if (!seenPageKeys.add(nextPageKey)) {
-                                pageKey = null
-                                break
-                            }
-                            if (pageCount >= ALCHEMY_MAX_PAGES) {
-                                pageKey = null
-                                break
-                            }
-                            pageKey = nextPageKey
-                        } while (!pageKey.isNullOrBlank())
+                            AlchemyCursorPage(
+                                items = response.data?.tokens.orEmpty(),
+                                nextCursor = response.data?.pageKey,
+                            )
+                        }
                         Result.Success(allTokens.toDomainModelFromAlchemy())
                     }
                     else -> {

@@ -202,6 +202,8 @@ class MainScreenViewModel @Inject constructor(
             }
 
             is WalletUpdate.Success -> {
+                var snapshotBalanceUsd = 0.0
+                var snapshotBalanceNative = 0.0
                 updateWalletState(publicKey) { currentState ->
 
                     // This is needed when Live Update is enabled,
@@ -216,19 +218,16 @@ class MainScreenViewModel @Inject constructor(
                     }
                     val updatedTokens = map.values.toList().sortedBy { it.amountDouble ?: 0.0 }
 
+                    snapshotBalanceUsd = updatedTokens.sumOf { it.valueUsd ?: 0.0 }
+                    snapshotBalanceNative = updatedTokens
+                        .filter { it.tokenAccountCategory != TokenAccountCategories.NFTS }
+                        .sumOf { it.valueEthEquivalent ?: it.valueNative ?: 0.0 }
+
                     currentState.copy(
                         walletViewState = ViewState.Success,
                         tokenAccounts = updatedTokens,
-                        balanceUSd = updatedTokens
-                            .sumOf { token ->
-                                token.valueUsd ?: 0.0
-                            },
-                        balanceNative = updatedTokens
-                            .filter { it.tokenAccountCategory != TokenAccountCategories.NFTS }
-                            .sumOf { token ->
-                                token.valueNative ?: 0.0
-                            }
-                        ,
+                        balanceUSd = snapshotBalanceUsd,
+                        balanceNative = snapshotBalanceNative,
                         transactions = update.transactions.takeIf { it.isNotEmpty() } ?: currentState.transactions
                     )
                 }
@@ -236,8 +235,8 @@ class MainScreenViewModel @Inject constructor(
                     wallet = wallet.copy(
                         snapshot = WalletSnapshot(
                             timestamp = System.currentTimeMillis(),
-                            balanceUSd = update.totalUsd,
-                            balanceNative = if (update.totalNative.isFinite()) update.totalNative else 0.0
+                            balanceUSd = snapshotBalanceUsd,
+                            balanceNative = snapshotBalanceNative
                         )
                     )
                 )

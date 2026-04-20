@@ -1,7 +1,5 @@
 package com.mrf.tghost.chain.evm.domain.model
 
-//typealias DefiPositionsResponse = List<EvmStakingProtocol>
-
 data class EvmStakingProtocol(
     val protocolName: String? = null,
     val protocolId: String? = null,

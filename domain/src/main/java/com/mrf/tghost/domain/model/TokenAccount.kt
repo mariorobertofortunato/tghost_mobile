@@ -31,6 +31,11 @@ data class TokenAccount(
     val uiAmountString: String? = null,
     val valueUsd: Double? = priceUsd?.toDouble()?.times(amountDouble ?: 1.0),
     val valueNative: Double? = priceNative?.toDouble()?.times(amountDouble ?: 1.0),
+    /**
+     * EVM only: USD value converted to **ETH** for wallet `balanceNative` totals.
+     * When null, portfolio uses [valueNative] (Solana/Sui/Tezos unchanged).
+     */
+    val valueEthEquivalent: Double? = null,
     val tokenAccountCategory: TokenAccountCategories? = null
 )
 

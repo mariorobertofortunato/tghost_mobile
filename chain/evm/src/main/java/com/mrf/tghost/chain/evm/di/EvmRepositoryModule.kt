@@ -1,14 +1,14 @@
 package com.mrf.tghost.chain.evm.di
 
 import com.mrf.tghost.chain.evm.data.repository.EvmNftRepositoryImpl
-import com.mrf.tghost.chain.evm.data.repository.EvmOnChainMetadataRepositoryImpl
 import com.mrf.tghost.chain.evm.data.repository.EvmStakingRepositoryImpl
 import com.mrf.tghost.chain.evm.data.repository.EvmTokenAccountsRepositoryImpl
+import com.mrf.tghost.chain.evm.data.repository.EvmTxRepositoryImpl
 import com.mrf.tghost.chain.evm.data.repository.EvmWalletBalanceRepositoryImpl
 import com.mrf.tghost.chain.evm.domain.repository.EvmNftRepository
-import com.mrf.tghost.chain.evm.domain.repository.EvmOnChainMetadataRepository
 import com.mrf.tghost.chain.evm.domain.repository.EvmStakingRepository
 import com.mrf.tghost.chain.evm.domain.repository.EvmTokenAccountsRepository
+import com.mrf.tghost.chain.evm.domain.repository.EvmTxRepository
 import com.mrf.tghost.chain.evm.domain.repository.EvmWalletBalanceRepository
 import dagger.Binds
 import dagger.Module
@@ -38,7 +38,7 @@ abstract class EvmRepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindOnChainMetadataRepository(impl: EvmOnChainMetadataRepositoryImpl): EvmOnChainMetadataRepository
+    abstract fun bindTxRepository(impl: EvmTxRepositoryImpl): EvmTxRepository
 
 
 }

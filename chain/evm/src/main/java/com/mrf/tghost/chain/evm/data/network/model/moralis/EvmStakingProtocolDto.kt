@@ -1,10 +1,9 @@
-package com.mrf.tghost.chain.evm.data.network.model
+package com.mrf.tghost.chain.evm.data.network.model.moralis
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-
-
-//typealias DefiPositionsResponseDto = List<EvmStakingProtocolDto>
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNames
 
 @Serializable
 data class EvmStakingProtocolDto(
@@ -35,8 +34,8 @@ data class ProjectedEarningsDto(
 data class PositionDto(
     @SerialName("label")                        val label: String? = null,
     @SerialName("address")                      val address: String? = null,
-    @SerialName("balance_usd")                  val balanceUsd: Double? = null,
-    @SerialName("total_unclaimed_usd_value")    val totalUnclaimedUsdValue: Double? = null,
+    @SerialName("balance_usd")                  val balanceUsd: JsonElement? = null,
+    @SerialName("total_unclaimed_usd_value")    val totalUnclaimedUsdValue: JsonElement? = null,
     @SerialName("tokens")                       val tokens: List<PositionTokenDto>? = null,
     @SerialName("position_details")             val positionDetails: PositionDetailsDto? = null
 )
@@ -52,8 +51,8 @@ data class PositionTokenDto(
     @SerialName("thumbnail")            val thumbnail: String? = null,
     @SerialName("balance")              val balance: String? = null,
     @SerialName("balance_formatted")    val balanceFormatted: String? = null,
-    @SerialName("usd_price")            val usdPrice: Double? = null,
-    @SerialName("usd_value")            val usdValue: Double? = null
+    @SerialName("usd_price")            val usdPrice: JsonElement? = null,
+    @SerialName("usd_value")            val usdValue: JsonElement? = null
 )
 
 @Serializable
@@ -70,5 +69,7 @@ data class PositionDetailsDto(
     @SerialName("is_stable_debt")           val isStableDebt: Boolean? = null,
     @SerialName("apy")                      val apy: Double? = null,
     @SerialName("projected_earnings_usd")   val projectedEarningsUsd: ProjectedEarningsDto? = null,
-    @SerialName("is_enabled_as_collateral") val isEnabledAsCollateral: Boolean? = null
+    @SerialName("is_enabled_as_collateral")
+    @JsonNames("is_enabled_collateral")
+    val isEnabledAsCollateral: Boolean? = null
 )

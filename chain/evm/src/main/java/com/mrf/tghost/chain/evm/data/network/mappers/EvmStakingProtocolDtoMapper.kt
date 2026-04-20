@@ -1,17 +1,26 @@
 package com.mrf.tghost.chain.evm.data.network.mappers
 
-import com.mrf.tghost.chain.evm.data.network.model.AccountDataDto
-import com.mrf.tghost.chain.evm.data.network.model.EvmStakingProtocolDto
-import com.mrf.tghost.chain.evm.data.network.model.PositionDetailsDto
-import com.mrf.tghost.chain.evm.data.network.model.PositionDto
-import com.mrf.tghost.chain.evm.data.network.model.PositionTokenDto
-import com.mrf.tghost.chain.evm.data.network.model.ProjectedEarningsDto
+import com.mrf.tghost.chain.evm.data.network.model.moralis.AccountDataDto
+import com.mrf.tghost.chain.evm.data.network.model.moralis.EvmStakingProtocolDto
+import com.mrf.tghost.chain.evm.data.network.model.moralis.PositionDetailsDto
+import com.mrf.tghost.chain.evm.data.network.model.moralis.PositionDto
+import com.mrf.tghost.chain.evm.data.network.model.moralis.PositionTokenDto
+import com.mrf.tghost.chain.evm.data.network.model.moralis.ProjectedEarningsDto
 import com.mrf.tghost.chain.evm.domain.model.AccountData
 import com.mrf.tghost.chain.evm.domain.model.EvmStakingProtocol
 import com.mrf.tghost.chain.evm.domain.model.Position
 import com.mrf.tghost.chain.evm.domain.model.PositionDetails
 import com.mrf.tghost.chain.evm.domain.model.PositionToken
 import com.mrf.tghost.chain.evm.domain.model.ProjectedEarnings
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.longOrNull
+
+fun List<EvmStakingProtocolDto>.toEvmStakingPositions(): List<EvmStakingProtocol> {
+    return this.map { it.toDomainModel() }
+}
 
 fun EvmStakingProtocolDto.toDomainModel(): EvmStakingProtocol {
     return EvmStakingProtocol(
@@ -45,8 +54,8 @@ fun PositionDto.toDomainModel(): Position {
     return Position(
         label = label,
         address = address,
-        balanceUsd = balanceUsd,
-        totalUnclaimedUsdValue = totalUnclaimedUsdValue,
+        balanceUsd = balanceUsd.toDoubleLenient(),
+        totalUnclaimedUsdValue = totalUnclaimedUsdValue.toDoubleLenient(),
         tokens = tokens?.map { it.toDomainModel() },
         positionDetails = positionDetails?.toDomainModel()
     )
@@ -63,8 +72,8 @@ fun PositionTokenDto.toDomainModel(): PositionToken {
         thumbnail = thumbnail,
         balance = balance,
         balanceFormatted = balanceFormatted,
-        usdPrice = usdPrice,
-        usdValue = usdValue
+        usdPrice = usdPrice.toDoubleLenient(),
+        usdValue = usdValue.toDoubleLenient()
     )
 }
 
@@ -83,4 +92,13 @@ fun PositionDetailsDto.toDomainModel(): PositionDetails {
         projectedEarningsUsd = projectedEarningsUsd?.toDomainModel(),
         isEnabledAsCollateral = isEnabledAsCollateral
     )
+}
+
+/** Moralis sometimes returns USD fields as JSON numbers, sometimes as strings — accept both. */
+fun JsonElement?.toDoubleLenient(): Double? {
+    if (this == null || this === JsonNull) return null
+    val prim = this as? JsonPrimitive ?: return null
+    prim.doubleOrNull?.let { return it }
+    prim.longOrNull?.let { return it.toDouble() }
+    return prim.content.toDoubleOrNull()
 }

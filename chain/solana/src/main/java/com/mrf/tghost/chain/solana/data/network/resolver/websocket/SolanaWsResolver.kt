@@ -1,11 +1,8 @@
 package com.mrf.tghost.chain.solana.data.network.resolver.websocket
 
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_WS_URL
-import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_WS_URL_ALCHEMY
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_WS_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL
-import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_ALCHEMY
-import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_DRPC_BASE
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_PUBLIC_NODE
 import com.mrf.tghost.chain.solana.utils.SOLANA_TESTNET_WS_URL
@@ -13,7 +10,6 @@ import com.mrf.tghost.chain.solana.utils.SOLANA_TESTNET_WS_URL_HELIUS
 import com.mrf.tghost.domain.model.NetworkType
 import com.mrf.tghost.domain.model.RpcPreference
 import com.mrf.tghost.domain.model.RpcProviderId
-import com.mrf.tghost.domain.model.SupportedChain
 import com.mrf.tghost.domain.model.SupportedChainId
 import com.mrf.tghost.domain.repository.PreferencesRepository
 import kotlinx.coroutines.flow.first
@@ -32,7 +28,6 @@ class SolanaWsResolver @Inject constructor(
         return when (preference.providerId) {
             RpcProviderId.OFFICIAL -> solanaOfficialWs(preference.networkType)
             RpcProviderId.HELIUS -> solanaHeliusWs(preference.networkType, apiKey)
-            RpcProviderId.DRPC -> solanaDrpcWs(apiKey)
             RpcProviderId.PUBLIC_NODE -> SOLANA_MAINNET_WS_URL_PUBLIC_NODE
             else -> solanaOfficialWs(preference.networkType)
         }
@@ -57,10 +52,4 @@ class SolanaWsResolver @Inject constructor(
         return "$base?api-key=$apiKey"
     }
 
-    private fun solanaDrpcWs(apiKey: String?): String {
-        require(!apiKey.isNullOrBlank()) {
-            "Missing API key for dRPC Solana WebSocket"
-        }
-        return SOLANA_MAINNET_WS_URL_DRPC_BASE + apiKey
-    }
 }

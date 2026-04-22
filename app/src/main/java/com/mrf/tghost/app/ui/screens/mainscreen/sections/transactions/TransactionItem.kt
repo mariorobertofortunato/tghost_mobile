@@ -38,6 +38,13 @@ fun TransactionItem(
     modifier: Modifier = Modifier,
     transaction: Transaction
 ) {
+    val primaryChange = transaction.balanceChanges.firstOrNull { !it.isNative }
+        ?: transaction.balanceChanges.firstOrNull()
+    val primaryChangeIndex = primaryChange?.let { transaction.balanceChanges.indexOf(it) } ?: -1
+    val secondaryChange = transaction.balanceChanges
+        .filterIndexed { index, _ -> index != primaryChangeIndex }
+        .firstOrNull()
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -82,9 +89,6 @@ fun TransactionItem(
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                val primaryChange = transaction.balanceChanges.firstOrNull { !it.isNative }
-                    ?: transaction.balanceChanges.firstOrNull()
-
                 primaryChange?.let {
                     val amount = it.amount.toDouble() / 10.0.pow(it.decimals.toDouble())
                     val color = if (amount > 0) MaterialTheme.colorScheme.primary
@@ -123,7 +127,6 @@ fun TransactionItem(
                         fontWeight = FontWeight.Bold
                     )
                 } else {
-                    val secondaryChange = transaction.balanceChanges.getOrNull(1)
                     secondaryChange?.let {
                         val amount = it.amount.toDouble() / 10.0.pow(it.decimals.toDouble())
                         Text(

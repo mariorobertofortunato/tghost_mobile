@@ -56,6 +56,8 @@ object SolanaProcessorHelper {
 
     // Stacked SOL item
     fun createStakedSolAccountItem(
+        stakePubkey: String,
+        validatorAddress: String,
         stakedSolAmount: BigDecimal,
         solPriceUsd: Double
     ): TokenAccount {
@@ -63,8 +65,8 @@ object SolanaProcessorHelper {
         val stakedValueUsd = stakedSolAmount.toDouble() * solPriceUsd
 
         return TokenAccount(
-            pubkey = SOLANA_STAKE_PROGRAM_ID,
-            name = "Staked SOL",
+            pubkey = stakePubkey,
+            name = if (validatorAddress.isBlank()) "Staked SOL" else "Staked SOL (${validatorAddress.take(4)}...${validatorAddress.takeLast(4)})",
             symbol = "stSOL",
             amount = totalStakedLamports.toString(),
             decimals = 9,
@@ -77,7 +79,7 @@ object SolanaProcessorHelper {
             pairAddress = "",
             uri = "",
             image = null,
-            description = "Native Solana Stake",
+            description = if (validatorAddress.isBlank()) "Native Solana Stake" else "Native Solana Stake on $validatorAddress",
             createdOn = null,
             labels = listOf("Stake"),
             baseToken = null,
@@ -150,7 +152,8 @@ object SolanaProcessorHelper {
             decimals = 0,
             amountDouble = 1.0,
             uiAmountString = "1",
-            image = dasAsset.content?.files?.firstOrNull()?.uri ?: dasAsset.content?.files?.firstOrNull()?.cdnUri,
+            image = dasAsset.content?.files?.firstOrNull()?.uri
+                ?: dasAsset.content?.files?.firstOrNull()?.cdnUri,
             description = dasAsset.content?.metadata?.description,
             createdOn = null,
             chainId = "solana",
@@ -248,17 +251,14 @@ object SolanaProcessorHelper {
                     interfaceName?.contains(".today", ignoreCase = true) == true ||
                     interfaceName?.contains("pastebin", ignoreCase = true) == true ||
                     interfaceName?.contains("onlinehostingipfs", ignoreCase = true) == true ||
-                    interfaceName?.contains(
-                        "gift",
-                        ignoreCase = true
-                    ) == true || // These checks are risky, we might be excluding proper NFt called "gift" or something
-                    interfaceName?.contains("redeem", ignoreCase = true) == true //
-        interfaceName?.contains("$", ignoreCase = true) == true //
+                    interfaceName?.contains("gift", ignoreCase = true) == true || // This checks is risky, we might be excluding proper NFt called "gift" or something
+                    interfaceName?.contains("redeem", ignoreCase = true) == true ||
+                    interfaceName?.contains("$", ignoreCase = true) == true
 
 
         asset.content?.files?.size?.let {
             if (it > 0) {
-                val imageUrl = asset.content?.files?.get(0)?.uri ?: ""
+                val imageUrl = asset.content.files[0].uri ?: ""
                 isSpamImageUri =
                     imageUrl.contains("nftdrop", ignoreCase = true) ||
                             imageUrl.contains("reward", ignoreCase = true) ||
@@ -266,7 +266,7 @@ object SolanaProcessorHelper {
                             imageUrl.contains(".today", ignoreCase = true) ||
                             imageUrl.contains("pastebin", ignoreCase = true) ||
                             imageUrl.contains("onlinehostingipfs", ignoreCase = true)
-                val cdnUri = asset.content?.files?.get(0)?.cdnUri ?: ""
+                val cdnUri = asset.content.files[0].cdnUri ?: ""
                 isSpamCdnUri =
                     cdnUri.contains("nftdrop") ||
                             cdnUri.contains("reward", ignoreCase = true) ||

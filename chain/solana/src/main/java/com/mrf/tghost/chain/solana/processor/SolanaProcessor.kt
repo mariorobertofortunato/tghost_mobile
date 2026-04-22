@@ -8,6 +8,7 @@ import com.mrf.tghost.chain.solana.domain.usecase.GetTxUseCase
 import com.mrf.tghost.chain.solana.domain.usecase.GetWalletBalanceUseCase
 import com.mrf.tghost.chain.solana.processor.SolanaProcessorHelper.isValidNft
 import com.mrf.tghost.chain.solana.utils.LAMPORTS_IN_SOL
+import com.mrf.tghost.chain.solana.utils.SOLANA_KNOWN_MINT_SYMBOLS
 import com.mrf.tghost.chain.solana.utils.SOLANA_TOKEN_MINT
 import com.mrf.tghost.data.utils.MARKET_DATA_URL_DEXSCREENER
 import com.mrf.tghost.domain.model.Result
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.flow.lastOrNull
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 class SolanaProcessor @Inject constructor(
@@ -45,6 +47,9 @@ class SolanaProcessor @Inject constructor(
     private val getMarketDataUseCase: GetMarketDataUseCase,
     private val getTxUseCase: GetTxUseCase
 ) {
+    private val txMintLabelCache = ConcurrentHashMap<String, String>().apply {
+        putAll(SOLANA_KNOWN_MINT_SYMBOLS)
+    }
 
     fun processSolanaWallet(publicKey: String): Flow<WalletUpdate> = flow {
 
@@ -153,6 +158,11 @@ class SolanaProcessor @Inject constructor(
 
                         val combinedMetadata =
                             combineMetadata(onChainMetadata, offChainMetadata)
+                        cacheMintLabel(
+                            mint = mint,
+                            symbol = combinedMetadata.symbol,
+                            name = combinedMetadata.name
+                        )
 
                         val tokenItem =
                             SolanaProcessorHelper.createSolanaTokenAccountItem(
@@ -174,18 +184,21 @@ class SolanaProcessor @Inject constructor(
             if (stakingAccountsFlow.isSuccess()) {
                 emit(WalletUpdate.LoadingStage("// Processing Staking Accounts"))
                 val stakes = stakingAccountsFlow.data
-                val totalStakedLamports = stakes.sumOf { it.amount }
-                val stakedSolAmount =
-                    totalStakedLamports.divide(LAMPORTS_IN_SOL, 9, RoundingMode.HALF_UP)
-                if (stakedSolAmount > BigDecimal.ZERO) {
-                    processedTokens.add(
-                        SolanaProcessorHelper.createStakedSolAccountItem(
-                            stakedSolAmount = stakedSolAmount,
-                            solPriceUsd = solPriceUsd
+                stakes.forEach { stake ->
+                    val stakedSolAmount =
+                        stake.amount.divide(LAMPORTS_IN_SOL, 9, RoundingMode.HALF_UP)
+                    if (stakedSolAmount > BigDecimal.ZERO) {
+                        processedTokens.add(
+                            SolanaProcessorHelper.createStakedSolAccountItem(
+                                stakePubkey = stake.pubkey,
+                                validatorAddress = stake.validatorAddress,
+                                stakedSolAmount = stakedSolAmount,
+                                solPriceUsd = solPriceUsd
+                            )
                         )
-                    )
-                    emit(WalletUpdate.Success(tokens = processedTokens))
+                    }
                 }
+                emit(WalletUpdate.Success(tokens = processedTokens))
             } else if (stakingAccountsFlow.isFailure()) {
                 emit(WalletUpdate.Error("Staking Accounts: ${stakingAccountsFlow.errorMessage}"))
             }
@@ -208,10 +221,11 @@ class SolanaProcessor @Inject constructor(
                 emit(WalletUpdate.Error("NFTs: ${nftsFlow.errorMessage}"))
             }
 
-            // 5. SOL transactions
+            // 5. Solana transactions
             if (txFlow.isSuccess()) {
                 emit(WalletUpdate.LoadingStage("// Processing transactions"))
-                emit(WalletUpdate.Success(transactions = txFlow.data))
+                val enrichedTransactions = enrichTransactionsWithTokenLabels(txFlow.data)
+                emit(WalletUpdate.Success(transactions = enrichedTransactions))
             } else if (txFlow.isFailure()) {
                 emit(WalletUpdate.Error("Transactions: ${txFlow.errorMessage}"))
             }
@@ -224,4 +238,94 @@ class SolanaProcessor @Inject constructor(
             .collect { update -> emit(update) }
     }
 
+    private suspend fun enrichTransactionsWithTokenLabels(transactions: List<Transaction>): List<Transaction> {
+        if (transactions.isEmpty()) return transactions
+
+        val mintsToResolve = transactions
+            .asSequence()
+            .flatMap { tx -> tx.balanceChanges.asSequence() }
+            .mapNotNull { change -> change.mint?.takeIf { !change.isNative && it.isNotBlank() } }
+            .distinct()
+            .filter { mint -> txMintLabelCache[mint].isNullOrBlank() }
+            .toList()
+
+        mintsToResolve.forEach { mint ->
+            resolveMintLabelFromMetadata(mint)?.let { resolved ->
+                txMintLabelCache[mint] = resolved
+            }
+        }
+
+        return transactions.map { tx ->
+            tx.copy(
+                balanceChanges = tx.balanceChanges.map { change ->
+                    if (change.isNative) {
+                        change
+                    } else {
+                        val mint = change.mint
+                        val label = mint?.let { txMintLabelCache[it] }?.takeIf { it.isNotBlank() }
+                        if (label != null) change.copy(symbol = label) else change
+                    }
+                }
+            )
+        }
+    }
+
+    private suspend fun resolveMintLabelFromMetadata(mint: String): String? {
+        return try {
+            val metadataPda = SolanaProcessorHelper.createMetadataPDAString(mint)
+            if (metadataPda.isBlank()) return resolveMintLabelFromMarketData(mint)
+
+            val onChainMetadata = when (val res = onChainMetadataUseCase.getSolanaTokenOnChainMetadata(metadataPda).lastOrNull()) {
+                is Result.Success -> res.data
+                else -> null
+            }
+
+            val offChainMetadata = when (val res = offChainMetadataUseCase.getOffChainMetadata(onChainMetadata?.uri.orEmpty()).lastOrNull()) {
+                is Result.Success -> res.data
+                else -> null
+            }
+
+            val symbol = offChainMetadata?.symbol?.trim().orEmpty().trimEnd('\u0000')
+                .ifBlank { onChainMetadata?.symbol?.trim().orEmpty().trimEnd('\u0000') }
+            val name = offChainMetadata?.name?.trim().orEmpty().trimEnd('\u0000')
+                .ifBlank { onChainMetadata?.name?.trim().orEmpty().trimEnd('\u0000') }
+
+            when {
+                symbol.isNotBlank() -> symbol
+                name.isNotBlank() -> name
+                else -> resolveMintLabelFromMarketData(mint)
+            }
+        } catch (_: Exception) {
+            resolveMintLabelFromMarketData(mint)
+        }
+    }
+
+    private suspend fun resolveMintLabelFromMarketData(mint: String): String? {
+        val market = when (
+            val res = getMarketDataUseCase.fetchMarketDataInfo(
+                MARKET_DATA_URL_DEXSCREENER,
+                mint,
+                SupportedChain.SOLANA
+            ).lastOrNull()
+        ) {
+            is Result.Success -> res.data
+            else -> null
+        } ?: return null
+
+        val symbol = market.baseToken?.symbol?.trim().orEmpty()
+        val name = market.baseToken?.name?.trim().orEmpty()
+        return when {
+            symbol.isNotBlank() -> symbol
+            name.isNotBlank() -> name
+            else -> null
+        }
+    }
+
+    private fun cacheMintLabel(mint: String, symbol: String?, name: String?) {
+        if (mint.isBlank()) return
+        val label = symbol?.trim()?.trimEnd('\u0000').takeIf { !it.isNullOrBlank() }
+            ?: name?.trim()?.trimEnd('\u0000').takeIf { !it.isNullOrBlank() }
+            ?: return
+        txMintLabelCache[mint] = label
+    }
 }

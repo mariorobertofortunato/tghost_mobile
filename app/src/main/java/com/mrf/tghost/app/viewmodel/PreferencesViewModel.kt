@@ -90,14 +90,12 @@ class PreferencesViewModel @Inject constructor(
                 getRpcProviderApiKeyUseCase(RpcProviderId.HELIUS),
                 getRpcProviderApiKeyUseCase(RpcProviderId.ALCHEMY),
                 getRpcProviderApiKeyUseCase(RpcProviderId.ANKR),
-                getRpcProviderApiKeyUseCase(RpcProviderId.DRPC),
                 getRpcProviderApiKeyUseCase(RpcProviderId.MORALIS),
-            ) { keyHelius, keyAlchemy, keyAnkr, keyDrpc, keyMoralis ->
+            ) { keyHelius, keyAlchemy, keyAnkr, keyMoralis ->
                 mapOf(
                     RpcProviderId.HELIUS.name to (keyHelius ?: ""),
                     RpcProviderId.ALCHEMY.name to (keyAlchemy ?: ""),
                     RpcProviderId.ANKR.name to (keyAnkr ?: ""),
-                    RpcProviderId.DRPC.name to (keyDrpc ?: ""),
                     RpcProviderId.MORALIS.name to (keyMoralis ?: ""),
                 )
             }

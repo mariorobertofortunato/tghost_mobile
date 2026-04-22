@@ -17,7 +17,6 @@ enum class RpcProviderId {
     ALCHEMY,
     MORALIS,
     ANKR,
-    DRPC,
     ECAD_INFRA,
     PUBLIC_NODE,
 }
@@ -66,12 +65,6 @@ enum class SupportedChain(val chain: Chain) {
                     displayName = "Helius",
                     requiresApiKey = true,
                     supportedNetworks = listOf(NetworkType.MAINNET, NetworkType.TESTNET, NetworkType.DEVNET),
-                ),
-                RpcProviderOption(
-                    id = RpcProviderId.DRPC,
-                    displayName = "dRPC",
-                    requiresApiKey = false,
-                    supportedNetworks = listOf(NetworkType.MAINNET),
                 ),
                 RpcProviderOption(
                     id = RpcProviderId.PUBLIC_NODE,

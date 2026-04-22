@@ -150,7 +150,8 @@ object SolanaProcessorHelper {
             decimals = 0,
             amountDouble = 1.0,
             uiAmountString = "1",
-            image = dasAsset.content?.files?.firstOrNull()?.uri ?: dasAsset.content?.files?.firstOrNull()?.cdnUri,
+            image = dasAsset.content?.files?.firstOrNull()?.uri
+                ?: dasAsset.content?.files?.firstOrNull()?.cdnUri,
             description = dasAsset.content?.metadata?.description,
             createdOn = null,
             chainId = "solana",
@@ -248,17 +249,14 @@ object SolanaProcessorHelper {
                     interfaceName?.contains(".today", ignoreCase = true) == true ||
                     interfaceName?.contains("pastebin", ignoreCase = true) == true ||
                     interfaceName?.contains("onlinehostingipfs", ignoreCase = true) == true ||
-                    interfaceName?.contains(
-                        "gift",
-                        ignoreCase = true
-                    ) == true || // These checks are risky, we might be excluding proper NFt called "gift" or something
-                    interfaceName?.contains("redeem", ignoreCase = true) == true //
-        interfaceName?.contains("$", ignoreCase = true) == true //
+                    interfaceName?.contains("gift", ignoreCase = true) == true || // This checks is risky, we might be excluding proper NFt called "gift" or something
+                    interfaceName?.contains("redeem", ignoreCase = true) == true ||
+                    interfaceName?.contains("$", ignoreCase = true) == true
 
 
         asset.content?.files?.size?.let {
             if (it > 0) {
-                val imageUrl = asset.content?.files?.get(0)?.uri ?: ""
+                val imageUrl = asset.content.files[0].uri ?: ""
                 isSpamImageUri =
                     imageUrl.contains("nftdrop", ignoreCase = true) ||
                             imageUrl.contains("reward", ignoreCase = true) ||
@@ -266,7 +264,7 @@ object SolanaProcessorHelper {
                             imageUrl.contains(".today", ignoreCase = true) ||
                             imageUrl.contains("pastebin", ignoreCase = true) ||
                             imageUrl.contains("onlinehostingipfs", ignoreCase = true)
-                val cdnUri = asset.content?.files?.get(0)?.cdnUri ?: ""
+                val cdnUri = asset.content.files[0].cdnUri ?: ""
                 isSpamCdnUri =
                     cdnUri.contains("nftdrop") ||
                             cdnUri.contains("reward", ignoreCase = true) ||

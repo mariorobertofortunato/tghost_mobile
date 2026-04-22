@@ -1,10 +1,8 @@
 package com.mrf.tghost.chain.solana.data.network.resolver.http
 
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_RPC_URL
-import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_RPC_URL_ALCHEMY
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_RPC_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL
-import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_ALCHEMY
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_DRPC
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_PUBLIC_NODE
@@ -13,11 +11,9 @@ import com.mrf.tghost.chain.solana.utils.SOLANA_TESTNET_RPC_URL_HELIUS
 import com.mrf.tghost.domain.model.NetworkType
 import com.mrf.tghost.domain.model.RpcPreference
 import com.mrf.tghost.domain.model.RpcProviderId
-import com.mrf.tghost.domain.model.SupportedChain
 import com.mrf.tghost.domain.model.SupportedChainId
 import com.mrf.tghost.domain.repository.PreferencesRepository
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.last
 import javax.inject.Inject
 
 class SolanaHttpResolver @Inject constructor(
@@ -33,7 +29,6 @@ class SolanaHttpResolver @Inject constructor(
         return when (preference.providerId) {
             RpcProviderId.OFFICIAL -> solanaOfficialUrl(preference.networkType)
             RpcProviderId.HELIUS -> solanaHeliusUrl(preference.networkType, apiKey)
-            RpcProviderId.DRPC -> solanaDrpcUrl(preference.networkType)
             RpcProviderId.PUBLIC_NODE -> solanaPublicNodeUrl(preference.networkType)
             // Currently unsupported for Solana – fall back to official mainnet.
             else -> SOLANA_MAINNET_RPC_URL
@@ -58,16 +53,6 @@ class SolanaHttpResolver @Inject constructor(
         }
         // Helius expects the API key as a query parameter (?api-key=KEY).
         return "${baseUrl}?api-key=$apiKey"
-    }
-
-    private fun solanaDrpcUrl(networkType: NetworkType): String {
-        // dRPC Solana constant is a public mainnet endpoint.
-        return when (networkType) {
-            NetworkType.MAINNET -> SOLANA_MAINNET_RPC_URL_DRPC
-            NetworkType.TESTNET,
-            NetworkType.DEVNET,
-                -> SOLANA_MAINNET_RPC_URL_DRPC
-        }
     }
 
     private fun solanaPublicNodeUrl(networkType: NetworkType): String {

@@ -208,7 +208,7 @@ class SolanaProcessor @Inject constructor(
                 emit(WalletUpdate.Error("NFTs: ${nftsFlow.errorMessage}"))
             }
 
-            // 5. SOL transactions
+            // 5. Solana transactions
             if (txFlow.isSuccess()) {
                 emit(WalletUpdate.LoadingStage("// Processing transactions"))
                 emit(WalletUpdate.Success(transactions = txFlow.data))

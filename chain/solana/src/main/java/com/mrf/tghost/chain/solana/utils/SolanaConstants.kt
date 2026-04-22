@@ -18,9 +18,6 @@ const val SOLANA_DEVNET_RPC_URL = "https://api.devnet.solana.com/"
 const val SOLANA_MAINNET_RPC_URL_HELIUS = "https://mainnet.helius-rpc.com/"
 const val SOLANA_TESTNET_RPC_URL_HELIUS = "https://testnet.helius-rpc.com/"
 const val SOLANA_DEVNET_RPC_URL_HELIUS = "https://devnet.helius-rpc.com/"
-// Alchemy Solana
-const val SOLANA_MAINNET_RPC_URL_ALCHEMY = "https://solana-mainnet.g.alchemy.com/v2/"
-const val SOLANA_DEVNET_RPC_URL_ALCHEMY = "https://solana-devnet.g.alchemy.com/v2/"
 // dRPC Solana (public mainnet endpoint)
 const val SOLANA_MAINNET_RPC_URL_DRPC = "https://solana.drpc.org"
 // PublicNode HTTP endpoint
@@ -35,11 +32,7 @@ const val SOLANA_DEVNET_WS_URL = "wss://api.devnet.solana.com"
 const val SOLANA_MAINNET_WS_URL_HELIUS = "wss://mainnet.helius-rpc.com/"
 const val SOLANA_TESTNET_WS_URL_HELIUS = "wss://testnet.helius-rpc.com/"
 const val SOLANA_DEVNET_WS_URL_HELIUS = "wss://devnet.helius-rpc.com/"
-// Alchemy Solana WS
-const val SOLANA_MAINNET_WS_URL_ALCHEMY = "wss://solana-mainnet.g.alchemy.com/v2/"
-const val SOLANA_DEVNET_WS_URL_ALCHEMY = "wss://solana-devnet.g.alchemy.com/v2/"
 // dRPC Solana WS
 const val SOLANA_MAINNET_WS_URL_DRPC_BASE = "wss://lb.drpc.live/solana/"
 // PublicNode WS
 const val SOLANA_MAINNET_WS_URL_PUBLIC_NODE = "wss://solana-rpc.publicnode.com"
-const val SOLANA_WS_URL = SOLANA_MAINNET_WS_URL_PUBLIC_NODE

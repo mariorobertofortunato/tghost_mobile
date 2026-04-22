@@ -129,7 +129,7 @@ class SolanaWsCoordinatorImpl @Inject constructor(
                                     val dto = parseSolanaStakeNotificationAccount(m, subscriptionId)
                                     dto?.let {
                                         val stake = it.toSolanaStake()
-                                        list.removeAll { elem -> elem.validatorAddress == stake.validatorAddress }
+                                        list.removeAll { elem -> elem.pubkey == stake.pubkey }
                                         list.add(stake)
                                         entry.notificationChannel.trySend(list.toList())
                                     }

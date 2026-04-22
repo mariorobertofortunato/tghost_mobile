@@ -56,6 +56,8 @@ object SolanaProcessorHelper {
 
     // Stacked SOL item
     fun createStakedSolAccountItem(
+        stakePubkey: String,
+        validatorAddress: String,
         stakedSolAmount: BigDecimal,
         solPriceUsd: Double
     ): TokenAccount {
@@ -63,8 +65,8 @@ object SolanaProcessorHelper {
         val stakedValueUsd = stakedSolAmount.toDouble() * solPriceUsd
 
         return TokenAccount(
-            pubkey = SOLANA_STAKE_PROGRAM_ID,
-            name = "Staked SOL",
+            pubkey = stakePubkey,
+            name = if (validatorAddress.isBlank()) "Staked SOL" else "Staked SOL (${validatorAddress.take(4)}...${validatorAddress.takeLast(4)})",
             symbol = "stSOL",
             amount = totalStakedLamports.toString(),
             decimals = 9,
@@ -77,7 +79,7 @@ object SolanaProcessorHelper {
             pairAddress = "",
             uri = "",
             image = null,
-            description = "Native Solana Stake",
+            description = if (validatorAddress.isBlank()) "Native Solana Stake" else "Native Solana Stake on $validatorAddress",
             createdOn = null,
             labels = listOf("Stake"),
             baseToken = null,

@@ -7,6 +7,7 @@ import java.math.BigDecimal
 fun SolanaStakeAccountDto.toSolanaStake(): SolanaStake {
     val activationEpoch = account.data.parsed.info.stake?.delegation?.activationEpoch?.toULong() ?: 0uL
     return SolanaStake(
+        pubkey = pubkey,
         validatorAddress = account.data.parsed.info.stake?.delegation?.voter ?: "",
         amount = BigDecimal(account.lamports),
         status = account.data.parsed.type,

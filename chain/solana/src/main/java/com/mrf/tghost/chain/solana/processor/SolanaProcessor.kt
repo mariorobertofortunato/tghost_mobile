@@ -174,18 +174,21 @@ class SolanaProcessor @Inject constructor(
             if (stakingAccountsFlow.isSuccess()) {
                 emit(WalletUpdate.LoadingStage("// Processing Staking Accounts"))
                 val stakes = stakingAccountsFlow.data
-                val totalStakedLamports = stakes.sumOf { it.amount }
-                val stakedSolAmount =
-                    totalStakedLamports.divide(LAMPORTS_IN_SOL, 9, RoundingMode.HALF_UP)
-                if (stakedSolAmount > BigDecimal.ZERO) {
-                    processedTokens.add(
-                        SolanaProcessorHelper.createStakedSolAccountItem(
-                            stakedSolAmount = stakedSolAmount,
-                            solPriceUsd = solPriceUsd
+                stakes.forEach { stake ->
+                    val stakedSolAmount =
+                        stake.amount.divide(LAMPORTS_IN_SOL, 9, RoundingMode.HALF_UP)
+                    if (stakedSolAmount > BigDecimal.ZERO) {
+                        processedTokens.add(
+                            SolanaProcessorHelper.createStakedSolAccountItem(
+                                stakePubkey = stake.pubkey,
+                                validatorAddress = stake.validatorAddress,
+                                stakedSolAmount = stakedSolAmount,
+                                solPriceUsd = solPriceUsd
+                            )
                         )
-                    )
-                    emit(WalletUpdate.Success(tokens = processedTokens))
+                    }
                 }
+                emit(WalletUpdate.Success(tokens = processedTokens))
             } else if (stakingAccountsFlow.isFailure()) {
                 emit(WalletUpdate.Error("Staking Accounts: ${stakingAccountsFlow.errorMessage}"))
             }

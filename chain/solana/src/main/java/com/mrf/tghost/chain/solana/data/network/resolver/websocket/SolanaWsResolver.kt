@@ -3,7 +3,6 @@ package com.mrf.tghost.chain.solana.data.network.resolver.websocket
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_WS_URL
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_WS_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL
-import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_DRPC_BASE
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_WS_URL_PUBLIC_NODE
 import com.mrf.tghost.chain.solana.utils.SOLANA_TESTNET_WS_URL

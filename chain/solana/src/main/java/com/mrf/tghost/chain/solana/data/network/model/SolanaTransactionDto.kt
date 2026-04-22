@@ -60,9 +60,9 @@ data class SolanaTransactionDetailsDto(
 
 @Serializable
 data class SolanaTransactionMessageDto(
-    @SerialName("accountKeys") val accountKeys: List<String>? = null,
+    @SerialName("accountKeys") val accountKeys: List<JsonElement>? = null,
     @SerialName("header") val header: SolanaTransactionHeaderDto? = null,
-    @SerialName("instructions") val instructions: List<SolanaTransactionInstructionDto>? = null,
+    @SerialName("instructions") val instructions: List<JsonElement>? = null,
     @SerialName("recentBlockhash") val recentBlockhash: String? = null
 )
 
@@ -73,10 +73,3 @@ data class SolanaTransactionHeaderDto(
     @SerialName("numRequiredSignatures") val numRequiredSignatures: Int? = null
 )
 
-@Serializable
-data class SolanaTransactionInstructionDto(
-    @SerialName("accounts") val accounts: List<Int>? = null,
-    @SerialName("data") val data: String? = null,
-    @SerialName("programIdIndex") val programIdIndex: Int? = null,
-    @SerialName("stackHeight") val stackHeight: Int? = null
-)

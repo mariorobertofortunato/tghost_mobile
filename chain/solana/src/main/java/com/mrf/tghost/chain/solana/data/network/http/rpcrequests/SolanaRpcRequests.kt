@@ -114,14 +114,20 @@ fun getSolanaStakesRequest(
 /** TX */
 fun getSolanaSignaturesForAddress(
     walletAddress: String,
+    limit: Int = 100,
+    before: String? = null,
+    until: String? = null
 ): JsonRpc20Request {
+    val safeLimit = limit.coerceIn(1, 1_000)
     return JsonRpc20Request(
         method = "getSignaturesForAddress",
         params = buildJsonArray {
             add(walletAddress)
             addJsonObject {
-                put("encoding", "jsonParsed")
                 put("commitment", COMMITMENT)
+                put("limit", safeLimit)
+                before?.takeIf { it.isNotBlank() }?.let { put("before", it) }
+                until?.takeIf { it.isNotBlank() }?.let { put("until", it) }
             }
         },
         id = UUID.randomUUID().toString()
@@ -138,7 +144,7 @@ fun getSolanaTransactionRequest(
             addJsonObject {
                 put("commitment", COMMITMENT)
                 put("maxSupportedTransactionVersion", 0)
-                put("encoding", "json")
+                put("encoding", "jsonParsed")
             }
         },
         id = UUID.randomUUID().toString()

@@ -3,7 +3,6 @@ package com.mrf.tghost.chain.solana.data.network.resolver.http
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_RPC_URL
 import com.mrf.tghost.chain.solana.utils.SOLANA_DEVNET_RPC_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL
-import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_DRPC
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_HELIUS
 import com.mrf.tghost.chain.solana.utils.SOLANA_MAINNET_RPC_URL_PUBLIC_NODE
 import com.mrf.tghost.chain.solana.utils.SOLANA_TESTNET_RPC_URL

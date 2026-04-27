@@ -24,7 +24,7 @@ room = "2.8.4"
 runtime = "1.10.6"
 rpcCore = "0.2.11"
 sol4k = "0.7.0"
-uiTextGoogleFonts = "1.10.6"
+uiTextGoogleFonts = "1.11.0"
 viewmodelCompose = "2.10.0"
 web3Solana = "0.3.1"
 

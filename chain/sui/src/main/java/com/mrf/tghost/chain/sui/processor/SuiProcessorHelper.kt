@@ -3,20 +3,28 @@ package com.mrf.tghost.chain.sui.processor
 import com.mrf.tghost.chain.sui.domain.model.SuiCoin
 import com.mrf.tghost.chain.sui.domain.model.SuiCoinMetadata
 import com.mrf.tghost.chain.sui.domain.model.SuiObject
+import com.mrf.tghost.chain.sui.domain.model.SuiOwnedObjectsSplit
+import com.mrf.tghost.chain.sui.utils.asBigIntegerOrNull
+import com.mrf.tghost.chain.sui.utils.extractCoinInnerType
+import com.mrf.tghost.chain.sui.utils.flattenMoveObjectFields
+import com.mrf.tghost.chain.sui.utils.getString
+import com.mrf.tghost.chain.sui.utils.getStringDeep
+import com.mrf.tghost.chain.sui.utils.graphQlBigIntToBigDecimal
+import com.mrf.tghost.chain.sui.utils.isCoinType
+import com.mrf.tghost.chain.sui.utils.isStakedSuiType
+import com.mrf.tghost.chain.sui.utils.isSystemType
+import com.mrf.tghost.chain.sui.utils.normalizeSuiMoveTypeRepr
 import com.mrf.tghost.domain.model.SupportedChainId
 import com.mrf.tghost.domain.model.TokenAccount
 import com.mrf.tghost.domain.model.TokenAccountCategories
 import com.mrf.tghost.domain.model.TokenMarketDataInfo
+import com.mrf.tghost.domain.model.metadata.TokenOffChainMetadata
+import java.net.URI
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.math.MathContext
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.longOrNull
 
 object SuiProcessorHelper {
 
@@ -29,7 +37,7 @@ object SuiProcessorHelper {
         val data = stakedSuiObject.data ?: return null
         val objectAddress = data.objectId ?: return null
         val repr = data.type.orEmpty()
-        if (!repr.contains(STAKED_SUI_TYPE_MARKER)) return null
+        if (!isStakedSuiType(repr)) return null
         val rawFields = data.content?.fields ?: return null
         val flat = flattenMoveObjectFields(rawFields)
         flat.getString("pool_id") ?: return null
@@ -79,20 +87,13 @@ object SuiProcessorHelper {
         return nested["value"]?.graphQlBigIntToBigDecimal()
     }
 
-    private fun JsonElement.graphQlBigIntToBigDecimal(): BigDecimal? {
-        return when (this) {
-            is JsonPrimitive ->
-                contentOrNull?.toBigDecimalOrNull() ?: longOrNull?.toBigDecimal()
-            else -> null
-        }
-    }
-
     fun createSuiCoinItem(
         tokenAccountDetails: SuiCoin,
         metadata: SuiCoinMetadata?,
         marketDataInfo: TokenMarketDataInfo?
     ): TokenAccount {
         val coinType = tokenAccountDetails.coinType
+        val displayFields = tokenAccountDetails.renderedDisplay
         val decimals = metadata?.decimals ?: 9
         val rawBalance = tokenAccountDetails.totalBalance.toBigDecimalOrNull() ?: BigDecimal.ZERO
         val uiAmount = try {
@@ -102,10 +103,17 @@ object SuiProcessorHelper {
         }
         val priceUsd = marketDataInfo?.priceUsdDouble ?: 0.0
         val priceNative = marketDataInfo?.priceNativeDouble ?: 0.0
-        val symbol = metadata?.symbol ?: coinType.substringAfterLast("::")
-        val name = metadata?.name ?: symbol
-        val logoUrl = marketDataInfo?.info?.imageUrl ?: metadata?.iconUrl
-        val description = metadata?.description
+        val symbol = metadata?.symbol
+            ?: displayFields.getString("symbol", "ticker")
+            ?: coinType.substringAfterLast("::")
+        val name = metadata?.name
+            ?: displayFields.getString("name", "title")
+            ?: symbol
+        val logoUrl = marketDataInfo?.info?.imageUrl
+            ?: metadata?.iconUrl
+            ?: displayFields.getString("image_url", "image", "thumbnail_url")
+        val description = metadata?.description ?: displayFields.getString("description")
+        val uri = displayFields.getString("link", "project_url", "website").orEmpty()
 
         return TokenAccount(
             chainId = SupportedChainId.SUI.name,
@@ -113,7 +121,7 @@ object SuiProcessorHelper {
             pairAddress = marketDataInfo?.pairAddress,
             name = name,
             symbol = symbol,
-            uri = "",
+            uri = uri,
             image = logoUrl,
             description = description,
             baseToken = marketDataInfo?.baseToken,
@@ -138,88 +146,145 @@ object SuiProcessorHelper {
 
     fun createSuiNftItem(
         nft: SuiObject,
-        metadata: SuiCoinMetadata?,
+        offChainMetadata: TokenOffChainMetadata? = null
     ): TokenAccount {
         val objectId = nft.data?.objectId.orEmpty()
+        val digest = nft.data?.digest.orEmpty()
         val rawType = nft.data?.type.orEmpty()
         val normalizedType = rawType.takeIf { it.isNotBlank() }?.let(::normalizeSuiMoveTypeRepr) ?: ""
-        val fields = flattenMoveObjectFields(nft.data?.content?.fields.orEmpty())
+        val fields = flattenMoveObjectFields(nft.data?.content?.fields.orEmpty()).toMutableMap()
+        val displayFields = nft.data?.renderedDisplay.orEmpty()
 
-        val onChainName = fields.getString(
+        val onChainName = displayFields.getString("name", "title", "display_name", "displayName")
+            ?: fields.getString(
             "name", "Name", "title", "Title", "display_name", "displayName"
         )
-        val onChainDesc = fields.getString(
+        val onChainDesc = displayFields.getString("description", "desc")
+            ?: fields.getString(
             "description", "Description", "desc", "bio", "Bio"
         )
-        val rawMedia = fields.getString(
-            "image_url", "imageUrl", "image", "img_url", "imgUrl", "url", "uri",
-            "thumbnail_url", "thumbnailUrl", "animation_url", "animationUrl"
+        val rawMedia = displayFields.getString(
+            "image_url", "imageUrl", "image", "thumbnail_url", "thumbnailUrl"
+        ) ?: fields.getStringDeep(
+            "image_url", "imageUrl", "image", "img_url", "imgUrl",
+            "thumbnail_url", "thumbnailUrl", "animation_url", "animationUrl",
+            "media_url", "mediaUrl", "file", "url"
         )
-        val indexOrTokenId = fields.getString("index", "token_id", "tokenId", "edition", "Edition")
+        val indexOrTokenId = fields.getStringDeep("index", "token_id", "tokenId", "edition", "Edition")
 
         val shortType = normalizedType.substringAfterLast("::").ifBlank { normalizedType }
-        val symbol = metadata?.symbol?.takeIf { it.isNotBlank() } ?: shortType.ifBlank { "NFT" }
+        val symbol = shortType.ifBlank { "NFT" }
 
         val name = when {
             !onChainName.isNullOrBlank() -> onChainName
-            !metadata?.name.isNullOrBlank() -> metadata!!.name
+            !offChainMetadata?.name.isNullOrBlank() -> offChainMetadata.name
             !indexOrTokenId.isNullOrBlank() -> "$symbol #$indexOrTokenId"
             shortType.isNotBlank() -> shortType
             else -> "NFT"
         }
 
-        val image = rawMedia?.trim()?.takeIf { it.isNotEmpty() }
-            ?: metadata?.iconUrl?.takeIf { it.isNotEmpty() }
+        val offChainImage = offChainMetadata?.image?.takeIf { it.isNotBlank() }
+            ?: offChainMetadata?.properties?.files
+                ?.firstOrNull { file ->
+                    val type = file.type.orEmpty().lowercase()
+                    type.startsWith("image/")
+                }?.uri
+                ?.takeIf { it.isNotBlank() }
 
-        val uri = fields.getString("url", "uri", "external_url", "externalUrl")
-            ?.trim()
-            .orEmpty()
+        val image = rawMedia?.trim()?.takeIf { it.isNotEmpty() }
+            ?: offChainImage
+
+        val normalizedUri = extractNftUriForTokenAccount(nft)
+        val createdOn = fields.getStringDeep(
+            "created_at", "createdAt", "minted_at", "mintedAt", "timestamp", "time"
+        ) ?: displayFields.getString("created_at", "createdAt")
 
         val description = buildNftDescription(
             onChainDesc = onChainDesc,
-            metadataDesc = metadata?.description,
+            metadataDesc = offChainMetadata?.description,
             fields = fields,
             normalizedType = normalizedType,
             objectId = objectId
         )
+        val nftAmount = extractNftAmount(fields)
 
         val labels = buildList {
             add("Sui")
             normalizedType.split("::").getOrNull(1)?.takeIf { it.isNotBlank() }?.let { add(it) }
+            displayFields.getString("creator")?.takeIf { it.isNotBlank() }?.let { add(it) }
+            normalizedUri.takeIf { it.isNotBlank() }?.let { url ->
+                try {
+                    URI(url).host?.removePrefix("www.")?.takeIf { it.isNotBlank() }?.let { add(it) }
+                } catch (_: Exception) {
+                    Unit
+                }
+            }
+            if (nft.data?.content?.hasPublicTransfer == false) add("Non-transferable")
         }
 
         return TokenAccount(
             chainId = SupportedChainId.SUI.name,
-            pubkey = objectId.ifBlank { normalizedType },
+            pubkey = objectId.ifBlank {
+                digest.ifBlank { normalizedType.ifBlank { nft.hashCode().toString() } }
+            },
             name = name,
             symbol = symbol,
-            uri = uri,
+            uri = normalizedUri,
             image = image,
             description = description,
+            createdOn = createdOn,
             labels = labels,
-            decimals = metadata?.decimals?.takeIf { it > 0 } ?: 0,
-            amount = "1",
-            amountDouble = 1.0,
-            uiAmountString = "1",
+            decimals = 0,
+            amount = nftAmount.rawAmount,
+            amountDouble = nftAmount.amountDouble,
+            uiAmountString = nftAmount.uiAmountString,
             tokenAccountCategory = TokenAccountCategories.NFTS
         )
     }
 
-    private fun flattenMoveObjectFields(fields: Map<String, JsonElement>): Map<String, JsonElement> {
-        val inner = (fields["fields"] as? JsonObject)?.jsonObject?.toMap().orEmpty()
-        if (inner.isEmpty()) return fields
-        return inner + fields.filterKeys { it != "fields" }
+    private data class NftAmount(
+        val rawAmount: String,
+        val amountDouble: Double?,
+        val uiAmountString: String
+    )
+
+    private fun extractNftAmount(fields: Map<String, JsonElement>): NftAmount {
+        val candidate = fields.getStringDeep(
+            "amount", "balance", "quantity", "qty", "principal"
+        )?.trim()
+        val numeric = candidate
+            ?.takeIf { it.matches(Regex("^-?\\d+(\\.\\d+)?$")) }
+            ?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() }
+        return if (!candidate.isNullOrBlank()) {
+            NftAmount(
+                rawAmount = candidate,
+                amountDouble = numeric,
+                uiAmountString = candidate
+            )
+        } else {
+            NftAmount(
+                rawAmount = "1",
+                amountDouble = 1.0,
+                uiAmountString = "1"
+            )
+        }
     }
 
-    private fun Map<String, JsonElement>.getString(vararg keys: String): String? {
-        for (key in keys) {
-            val el = this[key] ?: continue
-            if (el is JsonNull) continue
-            val prim = el as? JsonPrimitive ?: continue
-            val text = prim.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: continue
-            return text
-        }
-        return null
+    fun extractNftMetadataUri(nft: SuiObject): String {
+        val fields = flattenMoveObjectFields(nft.data?.content?.fields.orEmpty())
+        return (
+            fields.getStringDeep("metadata_url", "metadataUrl", "uri", "url")
+            )?.trim().orEmpty()
+    }
+
+    private fun extractNftUriForTokenAccount(nft: SuiObject): String {
+        val fields = flattenMoveObjectFields(nft.data?.content?.fields.orEmpty())
+        val displayFields = nft.data?.renderedDisplay.orEmpty()
+        return (
+            fields.getStringDeep("metadata_url", "metadataUrl", "uri", "url", "external_url", "externalUrl")
+                ?: displayFields.getString("link", "project_url", "projectUrl")
+            )?.trim().orEmpty()
     }
 
     private fun buildNftDescription(
@@ -262,18 +327,12 @@ object SuiProcessorHelper {
         return "${objectId.take(8)}…${objectId.takeLast(6)}"
     }
 
-    /**
-     * Single pass over owned objects: aggregate `Coin<>`, native `StakedSui`, NFT candidates.
-     * Other system / protocol objects are skipped.
-     */
-    data class OwnedObjectsSplit(
-        val coinObjects: List<SuiCoin>,
-        val nftObjects: List<SuiObject>,
-        val stakedSuiObjects: List<SuiObject>
-    )
-
-    fun splitOwnedObjects(objects: List<SuiObject>): OwnedObjectsSplit {
-        data class Acc(val sum: BigInteger, val count: Int)
+    fun splitOwnedObjects(objects: List<SuiObject>): SuiOwnedObjectsSplit {
+        data class Acc(
+            val sum: BigInteger,
+            val count: Int,
+            val renderedDisplay: Map<String, JsonElement>
+        )
 
         val byType = linkedMapOf<String, Acc>()
         val nftObjects = mutableListOf<SuiObject>()
@@ -284,10 +343,15 @@ object SuiProcessorHelper {
                     val fullType = obj.data?.type ?: continue
                     val innerType = extractCoinInnerType(fullType)?.let(::normalizeSuiMoveTypeRepr)
                         ?: continue
-                    val fields = obj.data?.content?.fields ?: continue
+                    val fields = obj.data.content?.fields ?: continue
                     val balance = readCoinBalance(fields) ?: continue
-                    val acc = byType[innerType] ?: Acc(BigInteger.ZERO, 0)
-                    byType[innerType] = Acc(acc.sum + balance, acc.count + 1)
+                    val currentDisplay = obj.data.renderedDisplay
+                    val acc = byType[innerType] ?: Acc(BigInteger.ZERO, 0, emptyMap())
+                    byType[innerType] = Acc(
+                        sum = acc.sum + balance,
+                        count = acc.count + 1,
+                        renderedDisplay = acc.renderedDisplay.ifEmpty { currentDisplay }
+                    )
                 }
                 isStakedSui(obj) -> stakedSuiObjects.add(obj)
                 isNft(obj) -> nftObjects.add(obj)
@@ -299,10 +363,11 @@ object SuiProcessorHelper {
                 coinType = coinType,
                 coinObjectCount = acc.count,
                 totalBalance = acc.sum.toString(),
-                lockedBalance = null
+                lockedBalance = null,
+                renderedDisplay = acc.renderedDisplay
             )
         }
-        return OwnedObjectsSplit(
+        return SuiOwnedObjectsSplit(
             coinObjects = coins,
             nftObjects = nftObjects,
             stakedSuiObjects = stakedSuiObjects
@@ -310,86 +375,33 @@ object SuiProcessorHelper {
     }
 
 
-    /** GraphQL `type.repr` uses 32-byte hex addresses; short RPC form uses `0x2::…`. */
-    private const val COIN_STRUCT_MARKER = "::coin::Coin<"
-
-    private fun extractCoinInnerType(fullType: String): String? {
-        val idx = fullType.indexOf(COIN_STRUCT_MARKER)
-        if (idx < 0 || !fullType.endsWith('>')) return null
-        val start = idx + COIN_STRUCT_MARKER.length
-        return fullType.substring(start, fullType.length - 1).trim()
-    }
-
-    /** Collapses `0x000…02` → `0x2` so coin metadata / market APIs match canonical types. */
-    private fun normalizeSuiMoveTypeRepr(repr: String): String =
-        Regex("0x[0-9a-fA-F]+").replace(repr) { shortenHexAddress(it.value) }
-
-    private fun shortenHexAddress(hexWithPrefix: String): String {
-        if (!hexWithPrefix.startsWith("0x", ignoreCase = true)) return hexWithPrefix
-        val body = hexWithPrefix.drop(2).trimStart('0').ifEmpty { "0" }
-        return "0x$body"
-    }
-
     private fun readCoinBalance(fields: Map<String, JsonElement>): BigInteger? {
         fields["balance"]?.asBigIntegerOrNull()?.let { return it }
         val nested = fields["fields"] as? JsonObject ?: return null
         return nested["balance"]?.asBigIntegerOrNull()
     }
 
-    private fun JsonElement.asBigIntegerOrNull(): BigInteger? {
-        val p = this as? JsonPrimitive ?: return null
-        return p.content.toBigIntegerOrNull()
-            ?: p.content.toLongOrNull()?.toBigInteger()
-    }
-
     private fun isCoin(obj: SuiObject): Boolean {
         val t = obj.data?.type ?: return false
-        return t.contains(COIN_STRUCT_MARKER)
+        return isCoinType(t)
     }
-
-    private const val STAKED_SUI_TYPE_MARKER = "::staking_pool::StakedSui"
 
     private fun isStakedSui(obj: SuiObject): Boolean {
         val t = obj.data?.type ?: return false
-        return t.contains(STAKED_SUI_TYPE_MARKER)
-    }
-
-    private fun isProtocolObject(obj: SuiObject): Boolean {
-        val patterns = listOf(
-            "::DepositInfo",
-            "::position::Position",
-            "::position::PositionCap",
-            "::ObligationOwnerCap",
-            "::lpcoin::",
-            "::pool::",
-            "::clmm::",      // Cetus / Turbos
-            "::vault::",
-            "::amm::"
-        )
-
-        return patterns.any { obj.data?.type?.contains(it) == true }
+        return isStakedSuiType(t)
     }
 
     private fun isSystemObject(obj: SuiObject): Boolean {
         val t = obj.data?.type ?: return false
-        val markers = listOf(
-            "::kiosk::",
-            "::package::",
-            "::clock::",
-            "::stake::",
-            "::transfer_policy::",
-            "::oblivious_access::",
-            "::display::",
-            "::dynamic_field::"
-        )
-        return markers.any { t.contains(it) }
+        return isSystemType(t)
     }
 
     fun isNft(obj: SuiObject): Boolean {
+        val type = obj.data?.type ?: return false
+        if (type.isBlank()) return false
         return !isCoin(obj)
                 && !isStakedSui(obj)
                 && !isSystemObject(obj)
-                && !isProtocolObject(obj)
     }
 
 }

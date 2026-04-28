@@ -23,6 +23,7 @@ fun SuiOwnedObjectsConnectionGraphQlDto.toDomainModel(): SuiOwnedObjects {
 private fun SuiOwnedObjectNodeGraphQlDto.toDomainModel(): SuiObject {
     val moveType = contents?.type?.repr
     val fields = (contents?.json as? JsonObject)?.jsonObject?.toMap().orEmpty()
+    val renderedDisplay = (contents?.display?.output as? JsonObject)?.jsonObject?.toMap().orEmpty()
 
     return SuiObject(
         data = SuiObjectData(
@@ -30,6 +31,7 @@ private fun SuiOwnedObjectNodeGraphQlDto.toDomainModel(): SuiObject {
             version = version?.jsonPrimitive?.contentOrNull,
             digest = digest,
             type = moveType,
+            renderedDisplay = renderedDisplay,
             content = if (moveType != null || fields.isNotEmpty()) {
                 SuiMoveObject(
                     dataType = "moveObject",

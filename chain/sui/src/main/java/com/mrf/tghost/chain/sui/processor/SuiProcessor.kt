@@ -12,6 +12,7 @@ import com.mrf.tghost.domain.model.WalletUpdate
 import com.mrf.tghost.domain.model.isSuccess
 import com.mrf.tghost.domain.model.isFailure
 import com.mrf.tghost.domain.usecase.GetMarketDataUseCase
+import com.mrf.tghost.domain.usecase.GetOffChainMetadataUseCase
 import com.mrf.tghost.chain.sui.processor.SuiProcessorHelper.splitOwnedObjects
 import com.mrf.tghost.data.utils.MARKET_DATA_URL_DEXSCREENER
 import kotlinx.coroutines.Deferred
@@ -32,7 +33,8 @@ class SuiProcessor @Inject constructor(
     private val ownedObjectsUseCase: GetOwnedObjectsUseCase,
     private val walletActivityUseCase: GetWalletActivityUseCase,
     private val onChainMetadataUseCase: GetOnChainMetadataUseCase,
-    private val getMarketDataUseCase: GetMarketDataUseCase
+    private val getMarketDataUseCase: GetMarketDataUseCase,
+    private val offChainMetadataUseCase: GetOffChainMetadataUseCase
 ) {
 
     fun processSuiWallet(publicKey: String) = flow {
@@ -111,29 +113,26 @@ class SuiProcessor @Inject constructor(
 
                 // NFTs
                 coroutineScope {
-                    split.nftObjects
-                        .map { nftAccount ->
+                    val nftResults = mutableListOf<TokenAccount>()
+                    split.nftObjects.map { nftAccount ->
                             async(Dispatchers.IO) {
-                                val onChainMetadata = try {
-                                    val res = onChainMetadataUseCase.getSuiCoinMetadata(
-                                        nftAccount.data?.type ?: ""
-                                    ).lastOrNull()
+                                val uri = SuiProcessorHelper.extractNftMetadataUri(nftAccount)
+                                val offChainMetadata = try {
+                                    val res = offChainMetadataUseCase.getOffChainMetadata(uri).lastOrNull()
                                     if (res is Result.Success) res.data else null
                                 } catch (e: Exception) {
                                     null
                                 }
-                                Pair(nftAccount, onChainMetadata)
-                            }
-                        }
-                        .awaitAll()
-                        .forEach { (nftAccount, onChainMetadata) ->
-                            processedTokens.add(
                                 SuiProcessorHelper.createSuiNftItem(
                                     nft = nftAccount,
-                                    metadata = onChainMetadata
+                                    offChainMetadata = offChainMetadata
                                 )
-                            )
-                        }
+                            }
+                        }.awaitAll().forEach { nftResults.add(it) }
+
+                    nftResults.forEach { nftItem ->
+                            processedTokens.add(nftItem)
+                    }
                 }
 
                 suiPriceUsd = processedTokens.firstOrNull { it.pubkey == "0x2::sui::SUI" }

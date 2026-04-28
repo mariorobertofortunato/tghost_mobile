@@ -18,6 +18,7 @@ data class SuiObjectData(
     val version: String? = null,
     val digest: String? = null,
     val type: String? = null,
+    val renderedDisplay: Map<String, JsonElement> = emptyMap(),
     val owner: SuiObjectOwner? = null,
     val previousTransaction: String? = null,
     val storageRebate: String? = null,

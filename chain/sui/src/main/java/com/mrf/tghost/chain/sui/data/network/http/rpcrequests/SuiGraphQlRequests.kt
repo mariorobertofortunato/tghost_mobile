@@ -26,6 +26,10 @@ fun getSuiOwnedObjectsGraphQlRequest(
                   type {
                     repr
                   }
+                  display {
+                    output
+                    errors
+                  }
                   json
                 }
               }

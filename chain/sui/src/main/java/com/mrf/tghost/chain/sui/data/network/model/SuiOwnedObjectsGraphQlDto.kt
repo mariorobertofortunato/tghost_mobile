@@ -32,5 +32,12 @@ data class SuiOwnedObjectNodeGraphQlDto(
 @Serializable
 data class SuiMoveContentsGraphQlDto(
     @SerialName("type") val type: SuiMoveTypeGraphQlDto? = null,
+    @SerialName("display") val display: SuiRenderedDisplayGraphQlDto? = null,
     @SerialName("json") val json: JsonElement? = null
+)
+
+@Serializable
+data class SuiRenderedDisplayGraphQlDto(
+    @SerialName("output") val output: JsonElement? = null,
+    @SerialName("errors") val errors: JsonElement? = null
 )
